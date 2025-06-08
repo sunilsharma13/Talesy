@@ -1,20 +1,18 @@
-import { NextApiRequest, NextApiResponse } from "next";
+import { NextRequest, NextResponse } from "next/server";
 import clientPromise from "@/lib/mongoClient";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-
-  const { token } = req.body;
-
-  if (!token || token.length !== 4) {
-    res.status(400).json({ error: "Invalid token" });
-    return;
-  }
-
+export async function POST(request: NextRequest) {
   try {
+    const body = await request.json();
+    const { token } = body;
+
+    if (!token || token.length !== 4) {
+      return NextResponse.json(
+        { error: "Invalid token" },
+        { status: 400 }
+      );
+    }
+
     const client = await clientPromise;
     const db = client.db("talesy");
 
@@ -22,7 +20,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const resetRecord = await db.collection("passwordResets").findOne({ token });
 
     if (!resetRecord) {
-      return res.status(400).json({ error: "Invalid or expired OTP" });
+      return NextResponse.json(
+        { error: "Invalid or expired OTP" },
+        { status: 400 }
+      );
     }
 
     const now = new Date();
@@ -30,13 +31,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const diffMinutes = (now.getTime() - createdAt.getTime()) / 1000 / 60;
 
     if (diffMinutes > 15) {
-      return res.status(400).json({ error: "OTP expired" });
+      return NextResponse.json(
+        { error: "OTP expired" },
+        { status: 400 }
+      );
     }
 
     // Return success with userId so frontend can save or query on next step
-    return res.status(200).json({ userId: resetRecord.userId });
+    return NextResponse.json({ userId: resetRecord.userId });
   } catch (error) {
     console.error("Verify OTP error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
+}
+
+// Handle other methods
+export async function GET(request: NextRequest) {
+  return NextResponse.json(
+    { error: "Method not allowed" },
+    { status: 405 }
+  );
 }
