@@ -1,14 +1,13 @@
 // app/api/posts/[id]/comments/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongoClient';
 import { ObjectId } from 'mongodb';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { sendTemplateEmail } from '@/lib/email';
 
-// The correct type signature for dynamic routes in App Router
 export async function POST(
-  request: NextRequest,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
   try {

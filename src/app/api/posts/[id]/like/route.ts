@@ -1,5 +1,5 @@
 // app/api/posts/[id]/like/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongoClient';
 import { ObjectId } from 'mongodb';
 import { getServerSession } from 'next-auth/next';
@@ -7,7 +7,7 @@ import { authOptions } from '@/lib/auth';
 import { sendTemplateEmail } from '@/lib/email';
 
 export async function POST(
-  request: NextRequest,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
@@ -75,7 +75,8 @@ export async function POST(
       // Don't send notification if user likes their own post
       if (post.userId !== currentUserId) {
         // Get user details - with type-safe queries
-        let likerQuery: any, authorQuery: any;
+        let likerQuery: any;
+        let authorQuery: any;
         
         if (ObjectId.isValid(currentUserId)) {
           likerQuery = { _id: new ObjectId(currentUserId) };
