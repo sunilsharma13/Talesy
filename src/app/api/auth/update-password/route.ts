@@ -1,22 +1,20 @@
-import { NextApiRequest, NextApiResponse } from "next";
+import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import clientPromise from "@/lib/mongoClient";
 import { ObjectId } from "mongodb";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-
-  const { userId, password } = req.body;
-
-  if (!userId || !password) {
-    res.status(400).json({ error: "User ID and password are required" });
-    return;
-  }
-
+export async function POST(request: NextRequest) {
   try {
+    const body = await request.json();
+    const { userId, password } = body;
+
+    if (!userId || !password) {
+      return NextResponse.json(
+        { error: "User ID and password are required" },
+        { status: 400 }
+      );
+    }
+
     const client = await clientPromise;
     const db = client.db("talesy");
 
@@ -29,15 +27,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
 
     if (result.modifiedCount !== 1) {
-      return res.status(400).json({ error: "Failed to update password" });
+      return NextResponse.json(
+        { error: "Failed to update password" },
+        { status: 400 }
+      );
     }
 
     // Optionally delete any existing password reset tokens for this user (clean up)
     await db.collection("passwordResets").deleteMany({ userId });
 
-    res.status(200).json({ message: "Password updated successfully" });
+    return NextResponse.json({ message: "Password updated successfully" });
   } catch (error) {
     console.error("Update password error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
+}
+
+// Handle other methods to return proper error response
+export async function GET(request: NextRequest) {
+  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+}
+
+export async function PUT(request: NextRequest) {
+  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+}
+
+export async function DELETE(request: NextRequest) {
+  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
 }
