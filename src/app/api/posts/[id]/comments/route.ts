@@ -1,10 +1,19 @@
 // app/api/posts/[id]/comments/route.ts
 import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongoClient';
-import { ObjectId, type WithId, type Document } from 'mongodb';
+import { ObjectId, WithId, Document } from 'mongodb';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { sendTemplateEmail } from '@/lib/email';
+
+function toObjectId(id: string | ObjectId) {
+  if (typeof id === 'string' && ObjectId.isValid(id)) {
+    return new ObjectId(id);
+  } else if (id instanceof ObjectId) {
+    return id;
+  }
+  throw new Error('Invalid id');
+}
 
 export async function POST(
   request: Request,
@@ -39,14 +48,16 @@ export async function POST(
     const client = await clientPromise;
     const db = client.db('talesy');
 
+    // Find the post
     const post = await db.collection('writings').findOne({
-      _id: new ObjectId(postId),
+      _id: toObjectId(postId),
     });
 
     if (!post) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
+    // Add the comment
     const comment = {
       postId,
       userId,
@@ -56,34 +67,33 @@ export async function POST(
 
     const result = await db.collection('comments').insertOne(comment);
 
+    // Update comment count on post
     await db.collection('writings').updateOne(
-      { _id: new ObjectId(postId) },
+      { _id: toObjectId(postId) },
       { $inc: { comments: 1 } }
     );
 
+    // Fetch commenter details safely
     let commenter: WithId<Document> | null = null;
-if (ObjectId.isValid(userId)) {
-  try {
-    commenter = await db.collection('users').findOne({
-      _id: new ObjectId(userId),
-    });
-  } catch (err) {
-    console.error('Failed to fetch commenter:', err);
-  }
-} else {
-  console.error('Invalid ObjectId for commenter:', userId);
-}
+    try {
+      commenter = await db.collection('users').findOne({
+        _id: toObjectId(userId),
+      });
+    } catch (err) {
+      console.error('Failed to fetch commenter:', err);
+    }
 
-
+    // Don't notify for self-comments
     if (post.userId !== userId) {
-      let postAuthor: WithId<Document> | null = null;
+      let postAuthorQuery;
       try {
-        postAuthor = await db.collection('users').findOne({
-          _id: ObjectId.isValid(post.userId) ? new ObjectId(post.userId) : post.userId,
-        });
-      } catch (err) {
-        console.error('Failed to fetch post author:', err);
+        postAuthorQuery = { _id: toObjectId(post.userId) };
+      } catch {
+        // fallback if userId is not a valid ObjectId string
+        postAuthorQuery = { _id: post.userId };
       }
+
+      const postAuthor = await db.collection('users').findOne(postAuthorQuery);
 
       if (
         postAuthor &&

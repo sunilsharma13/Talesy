@@ -1,10 +1,19 @@
 // app/api/posts/[id]/like/route.ts
 import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongoClient';
-import { ObjectId, type WithId, type Document } from 'mongodb';
+import { ObjectId, WithId, Document } from 'mongodb';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { sendTemplateEmail } from '@/lib/email';
+
+function toObjectId(id: string | ObjectId) {
+  if (typeof id === 'string' && ObjectId.isValid(id)) {
+    return new ObjectId(id);
+  } else if (id instanceof ObjectId) {
+    return id;
+  }
+  throw new Error('Invalid id');
+}
 
 export async function POST(
   request: Request,
@@ -26,27 +35,31 @@ export async function POST(
     const client = await clientPromise;
     const db = client.db('talesy');
 
+    // Find the post
     const post = await db.collection('writings').findOne({
-      _id: new ObjectId(postId),
+      _id: toObjectId(postId),
     });
 
     if (!post) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
+    // Check if already liked
     const existingLike = await db.collection('likes').findOne({
       postId,
       userId: currentUserId,
     });
 
     if (existingLike) {
+      // Unlike
       await db.collection('likes').deleteOne({
         postId,
         userId: currentUserId,
       });
 
+      // Update post like count
       await db.collection('writings').updateOne(
-        { _id: new ObjectId(postId) },
+        { _id: toObjectId(postId) },
         { $inc: { likes: -1 } }
       );
 
@@ -55,45 +68,40 @@ export async function POST(
         count: (post.likes || 1) - 1,
       });
     } else {
+      // Like
       await db.collection('likes').insertOne({
         postId,
         userId: currentUserId,
         createdAt: new Date(),
       });
 
+      // Update post like count
       await db.collection('writings').updateOne(
-        { _id: new ObjectId(postId) },
+        { _id: toObjectId(postId) },
         { $inc: { likes: 1 } }
       );
 
+      // Don't send notification if user likes their own post
       if (post.userId !== currentUserId) {
         let liker: WithId<Document> | null = null;
         let author: WithId<Document> | null = null;
-      
-        if (ObjectId.isValid(currentUserId)) {
-          try {
-            liker = await db.collection('users').findOne({
-              _id: new ObjectId(currentUserId),
-            });
-          } catch (err) {
-            console.error('Failed to fetch liker:', err);
-          }
-        } else {
-          console.error('Invalid ObjectId for liker:', currentUserId);
+
+        try {
+          liker = await db.collection('users').findOne({
+            _id: toObjectId(currentUserId),
+          });
+        } catch (err) {
+          console.error('Failed to fetch liker:', err);
         }
-      
-        if (ObjectId.isValid(post.userId)) {
-          try {
-            author = await db.collection('users').findOne({
-              _id: new ObjectId(post.userId),
-            });
-          } catch (err) {
-            console.error('Failed to fetch author:', err);
-          }
-        } else {
-          console.error('Invalid ObjectId for author:', post.userId);
+
+        try {
+          author = await db.collection('users').findOne({
+            _id: toObjectId(post.userId),
+          });
+        } catch (err) {
+          console.error('Failed to fetch author:', err);
         }
-      
+
         if (author && author.email && author.emailPreferences?.newLike !== false) {
           try {
             await sendTemplateEmail(author.email, 'newLike', [
@@ -107,7 +115,7 @@ export async function POST(
           }
         }
       }
-      
+
       return NextResponse.json({
         liked: true,
         count: (post.likes || 0) + 1,
