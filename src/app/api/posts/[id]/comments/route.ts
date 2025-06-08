@@ -1,4 +1,3 @@
-// app/api/posts/[id]/comments/route.ts
 import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongoClient';
 import { ObjectId, WithId, Document } from 'mongodb';
@@ -57,9 +56,9 @@ export async function POST(
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    // Add the comment
+    // Prepare comment with postId as ObjectId
     const comment = {
-      postId,
+      postId: toObjectId(postId),
       userId,
       content: content.trim(),
       createdAt: new Date(),
@@ -67,7 +66,7 @@ export async function POST(
 
     const result = await db.collection('comments').insertOne(comment);
 
-    // Update comment count on post
+    // Increment comment count atomically and get updated count
     await db.collection('writings').updateOne(
       { _id: toObjectId(postId) },
       { $inc: { comments: 1 } }
@@ -83,13 +82,12 @@ export async function POST(
       console.error('Failed to fetch commenter:', err);
     }
 
-    // Don't notify for self-comments
+    // Notify post author except for self-comments
     if (post.userId !== userId) {
       let postAuthorQuery;
       try {
         postAuthorQuery = { _id: toObjectId(post.userId) };
       } catch {
-        // fallback if userId is not a valid ObjectId string
         postAuthorQuery = { _id: post.userId };
       }
 

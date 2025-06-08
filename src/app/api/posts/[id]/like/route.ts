@@ -1,4 +1,3 @@
-// app/api/posts/[id]/like/route.ts
 import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongoClient';
 import { ObjectId, WithId, Document } from 'mongodb';
@@ -35,7 +34,7 @@ export async function POST(
     const client = await clientPromise;
     const db = client.db('talesy');
 
-    // Find the post
+    // Find the post by ObjectId
     const post = await db.collection('writings').findOne({
       _id: toObjectId(postId),
     });
@@ -44,44 +43,46 @@ export async function POST(
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    // Check if already liked
+    // Check if already liked by this user
     const existingLike = await db.collection('likes').findOne({
-      postId,
+      postId: toObjectId(postId),
       userId: currentUserId,
     });
 
     if (existingLike) {
       // Unlike
       await db.collection('likes').deleteOne({
-        postId,
+        postId: toObjectId(postId),
         userId: currentUserId,
       });
 
-      // Update post like count
-      await db.collection('writings').updateOne(
+      // Decrement like count atomically and get updated count
+      const updateResult = await db.collection('writings').findOneAndUpdate(
         { _id: toObjectId(postId) },
-        { $inc: { likes: -1 } }
+        { $inc: { likes: -1 } },
+        { returnDocument: 'after' }
       );
 
       return NextResponse.json({
         liked: false,
-        count: (post.likes || 1) - 1,
+        count: updateResult.value?.likes || 0,
       });
     } else {
       // Like
       await db.collection('likes').insertOne({
-        postId,
+        postId: toObjectId(postId),
         userId: currentUserId,
         createdAt: new Date(),
       });
 
-      // Update post like count
-      await db.collection('writings').updateOne(
+      // Increment like count atomically and get updated count
+      const updateResult = await db.collection('writings').findOneAndUpdate(
         { _id: toObjectId(postId) },
-        { $inc: { likes: 1 } }
+        { $inc: { likes: 1 } },
+        { returnDocument: 'after' }
       );
 
-      // Don't send notification if user likes their own post
+      // Notify author if not liking own post
       if (post.userId !== currentUserId) {
         let liker: WithId<Document> | null = null;
         let author: WithId<Document> | null = null;
@@ -118,7 +119,7 @@ export async function POST(
 
       return NextResponse.json({
         liked: true,
-        count: (post.likes || 0) + 1,
+        count: updateResult.value?.likes || 1,
       });
     }
   } catch (error) {
