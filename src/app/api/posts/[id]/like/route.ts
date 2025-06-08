@@ -1,5 +1,5 @@
 // app/api/posts/[id]/like/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongoClient';
 import { ObjectId } from 'mongodb';
 import { getServerSession } from 'next-auth/next';
@@ -7,7 +7,7 @@ import { authOptions } from '@/lib/auth';
 import { sendTemplateEmail } from '@/lib/email';
 
 export async function POST(
-  req: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
