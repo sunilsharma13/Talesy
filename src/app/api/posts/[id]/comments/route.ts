@@ -1,7 +1,7 @@
 // app/api/posts/[id]/comments/route.ts
 import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongoClient';
-import { ObjectId } from 'mongodb';
+import { ObjectId, type WithId, type Document } from 'mongodb';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { sendTemplateEmail } from '@/lib/email';
@@ -39,7 +39,6 @@ export async function POST(
     const client = await clientPromise;
     const db = client.db('talesy');
 
-    // Find the post
     const post = await db.collection('writings').findOne({
       _id: new ObjectId(postId),
     });
@@ -48,7 +47,6 @@ export async function POST(
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    // Add the comment
     const comment = {
       postId,
       userId,
@@ -58,36 +56,35 @@ export async function POST(
 
     const result = await db.collection('comments').insertOne(comment);
 
-    // Update comment count on post
     await db.collection('writings').updateOne(
       { _id: new ObjectId(postId) },
       { $inc: { comments: 1 } }
     );
 
-    // Build commenterQuery safely
-    let commenterQuery;
-    if (ObjectId.isValid(userId)) {
-      commenterQuery = { _id: new ObjectId(userId) };
-    } else {
-      console.error('User ID is not a valid ObjectId:', userId);
-      return NextResponse.json({ error: 'Invalid user ID format' }, { status: 400 });
-    }
+    let commenter: WithId<Document> | null = null;
+if (ObjectId.isValid(userId)) {
+  try {
+    commenter = await db.collection('users').findOne({
+      _id: new ObjectId(userId),
+    });
+  } catch (err) {
+    console.error('Failed to fetch commenter:', err);
+  }
+} else {
+  console.error('Invalid ObjectId for commenter:', userId);
+}
 
-    const commenter = await db.collection('users').findOne(commenterQuery);
 
-    if (!commenter) {
-      console.warn('Commenter not found for ID:', userId);
-    }
-
-    // Don't notify for self-comments
     if (post.userId !== userId) {
-      const postAuthorQuery = ObjectId.isValid(post.userId)
-        ? { _id: new ObjectId(post.userId) }
-        : { _id: post.userId };
+      let postAuthor: WithId<Document> | null = null;
+      try {
+        postAuthor = await db.collection('users').findOne({
+          _id: ObjectId.isValid(post.userId) ? new ObjectId(post.userId) : post.userId,
+        });
+      } catch (err) {
+        console.error('Failed to fetch post author:', err);
+      }
 
-      const postAuthor = await db.collection('users').findOne(postAuthorQuery);
-
-      // Send email notification if enabled
       if (
         postAuthor &&
         postAuthor.email &&
