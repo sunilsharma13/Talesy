@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import TiptapEditor from "@/components/TiptapEditor";
 
 const WritePage = () => {
-  const [content, setContent] = useState("");
-  const [message, setMessage] = useState(""); // Correctly placed inside the component
-  const [showMessage, setShowMessage] = useState(false);
+  const [content, setContent] = useState<string>("");
+  const [message, setMessage] = useState<string>("");
+  const [showMessage, setShowMessage] = useState<boolean>(false); // Currently unused, so optional
 
   // Load saved content when the page loads
   useEffect(() => {
@@ -17,7 +17,7 @@ const WritePage = () => {
   }, []);
 
   const handleSave = () => {
-    localStorage.setItem("savedContent", content); // Ensure content is actually saved
+    localStorage.setItem("savedContent", content);
     setMessage("Content saved!");
 
     // Hide the message after 3 seconds
@@ -29,7 +29,7 @@ const WritePage = () => {
   return (
     <div className="max-w-2xl mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">
-        Sunil, you're awesome! Now write your story
+        Sunil, you&apos;re awesome! Now write your story
       </h1>
       <TiptapEditor content={content} setContent={setContent} />
       <button

@@ -200,9 +200,9 @@ export default function Navbar() {
     ? "bg-gradient-to-r from-[#0e0e2c] via-[#1a1a3a] to-[#252550]"
     : "bg-white border-b border-gray-200 text-gray-800";
 
-  const handleNavigation = (path: string) => {
-    router.push(path);
-  };
+    const handleNavigation = (path: string) => {
+      window.location.href = path;
+    };
 
   return (
     <nav className={`${navBarBg} shadow-lg sticky top-0 z-50 transition-colors`}>
