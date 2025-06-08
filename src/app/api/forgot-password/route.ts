@@ -1,21 +1,19 @@
-import { NextApiRequest, NextApiResponse } from "next";
+import { NextRequest, NextResponse } from "next/server";
 import clientPromise from "../../../lib/mongoClient";
 import { generatePasswordResetToken } from "../../../lib/authUtils";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-
-  const { emailOrUsername } = req.body;
-
-  if (!emailOrUsername) {
-    res.status(400).json({ error: "Email or username is required" });
-    return;
-  }
-
+export async function POST(request: NextRequest) {
   try {
+    const body = await request.json();
+    const { emailOrUsername } = body;
+
+    if (!emailOrUsername) {
+      return NextResponse.json(
+        { error: "Email or username is required" },
+        { status: 400 }
+      );
+    }
+
     const client = await clientPromise;
     const db = client.db("talesy");
 
@@ -25,18 +23,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     if (!user) {
-      return res.status(404).json({ error: "User not found" });
+      return NextResponse.json(
+        { error: "User not found" },
+        { status: 404 }
+      );
     }
 
     const token = await generatePasswordResetToken(user._id.toString());
 
     if (!token) {
-      return res.status(500).json({ error: "Failed to generate OTP" });
+      return NextResponse.json(
+        { error: "Failed to generate OTP" },
+        { status: 500 }
+      );
     }
 
-    res.status(200).json({ message: "OTP sent to your email" });
+    return NextResponse.json({ message: "OTP sent to your email" });
   } catch (error) {
     console.error("Forgot password error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
+}
+
+// Handle other HTTP methods
+export async function GET(request: NextRequest) {
+  return NextResponse.json(
+    { error: "Method not allowed" },
+    { status: 405 }
+  );
 }
