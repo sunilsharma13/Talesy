@@ -49,7 +49,6 @@ export async function POST(
     const client = await clientPromise;
     const db = client.db('talesy');
 
-    // Find the post
     const post = await db.collection('writings').findOne({
       _id: toObjectId(postId),
     });
@@ -58,7 +57,6 @@ export async function POST(
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    // Prepare comment with postId as ObjectId
     const comment = {
       postId: toObjectId(postId),
       userId,
@@ -68,13 +66,11 @@ export async function POST(
 
     const result = await db.collection('comments').insertOne(comment);
 
-    // Increment comment count atomically and get updated count
     await db.collection('writings').updateOne(
       { _id: toObjectId(postId) },
       { $inc: { comments: 1 } }
     );
 
-    // Fetch commenter details safely
     let commenter: WithId<Document> | null = null;
     try {
       commenter = await db.collection('users').findOne({
@@ -84,7 +80,6 @@ export async function POST(
       console.error('Failed to fetch commenter:', err);
     }
 
-    // Notify post author except for self-comments
     if (post.userId !== userId) {
       let postAuthorQuery;
       try {

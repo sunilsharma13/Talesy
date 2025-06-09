@@ -36,7 +36,6 @@ export async function POST(
     const client = await clientPromise;
     const db = client.db('talesy');
 
-    // Find the post by ObjectId
     const post = await db.collection('writings').findOne({
       _id: toObjectId(postId),
     });
@@ -45,20 +44,17 @@ export async function POST(
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    // Check if already liked by this user
     const existingLike = await db.collection('likes').findOne({
       postId: toObjectId(postId),
       userId: currentUserId,
     });
 
     if (existingLike) {
-      // Unlike
       await db.collection('likes').deleteOne({
         postId: toObjectId(postId),
         userId: currentUserId,
       });
 
-      // Decrement like count atomically and get updated count
       const updateResult = await db.collection('writings').findOneAndUpdate(
         { _id: toObjectId(postId) },
         { $inc: { likes: -1 } },
@@ -70,21 +66,18 @@ export async function POST(
         count: updateResult.value?.likes || 0,
       });
     } else {
-      // Like
       await db.collection('likes').insertOne({
         postId: toObjectId(postId),
         userId: currentUserId,
         createdAt: new Date(),
       });
 
-      // Increment like count atomically and get updated count
       const updateResult = await db.collection('writings').findOneAndUpdate(
         { _id: toObjectId(postId) },
         { $inc: { likes: 1 } },
         { returnDocument: 'after' }
       );
 
-      // Notify author if not liking own post
       if (post.userId !== currentUserId) {
         let liker: WithId<Document> | null = null;
         let author: WithId<Document> | null = null;
