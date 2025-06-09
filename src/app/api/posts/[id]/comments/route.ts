@@ -16,8 +16,10 @@ function toObjectId(id: string | ObjectId) {
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
+  const { params } = context;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session || !session.user) {
