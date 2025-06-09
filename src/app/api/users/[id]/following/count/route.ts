@@ -1,14 +1,12 @@
+// app/api/users/[id]/following/count/route.ts
 import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongoClient';
 import { ObjectId } from 'mongodb';
 
-export async function GET(
-  req: Request,
-  context: { params: { id: string } }
-) {
-  const { params } = context;
+export async function GET(req: Request) {
   try {
-    const userId = params.id;
+    const userId = req.url.split('/users/')[1].split('/')[0];
+
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }

@@ -18,6 +18,11 @@ interface User {
   avatar?: string;
 }
 
+// Helper to create filter for both ObjectId and string _id
+function getUserIdFilter(id: string) {
+  return ObjectId.isValid(id) ? { _id: new ObjectId(id) } : { _id: id };
+}
+
 export async function GET(
   req: Request,
   context: { params: { id: string } }
@@ -75,16 +80,9 @@ export async function POST(
     const userCollection = db.collection<User>('users');
     const followCollection = db.collection('follows');
 
-    const currentUserFilter = ObjectId.isValid(currentUserId)
-      ? { _id: new ObjectId(currentUserId) }
-      : { _id: currentUserId };
-
-    const userToFollowFilter = ObjectId.isValid(userToFollowId)
-      ? { _id: new ObjectId(userToFollowId) }
-      : { _id: userToFollowId };
-
-    const currentUser = await userCollection.findOne(currentUserFilter);
-    const userToFollow = await userCollection.findOne(userToFollowFilter);
+    // Safe _id filters
+    const currentUser = await userCollection.findOne(getUserIdFilter(currentUserId));
+    const userToFollow = await userCollection.findOne(getUserIdFilter(userToFollowId));
 
     if (!currentUser || !userToFollow) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
