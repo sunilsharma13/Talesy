@@ -11,21 +11,20 @@ function toObjectId(id: string | ObjectId) {
   throw new Error('Invalid ObjectId');
 }
 
-export async function POST(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const url = new URL(request.url);
+    const postIdRaw = url.pathname.split('/')[4];
+    const postId = toObjectId(postIdRaw);
+    const userId = session.user.id;
+
     const client = await clientPromise;
     const db = client.db('talesy');
-
-    const postId = toObjectId(params.id);
-    const userId = session.user.id;
 
     const post = await db.collection('writings').findOne({ _id: postId });
     if (!post) {
@@ -72,7 +71,7 @@ export async function POST(
               author.name || 'User',
               liker?.name || 'Someone',
               post.title,
-              params.id,
+              postIdRaw,
             ]);
           } catch (e) {
             console.error('Like notification failed:', e);

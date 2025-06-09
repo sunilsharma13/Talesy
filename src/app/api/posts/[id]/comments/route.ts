@@ -11,10 +11,7 @@ function toObjectId(id: string | ObjectId) {
   throw new Error('Invalid ObjectId');
 }
 
-export async function POST(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session || !session.user) {
@@ -26,11 +23,13 @@ export async function POST(
       return NextResponse.json({ error: 'Comment cannot be empty' }, { status: 400 });
     }
 
+    const url = new URL(request.url);
+    const postIdRaw = url.pathname.split('/')[4];
+    const postId = toObjectId(postIdRaw);
+    const userId = session.user.id;
+
     const client = await clientPromise;
     const db = client.db('talesy');
-
-    const postId = toObjectId(params.id);
-    const userId = session.user.id;
 
     const post = await db.collection('writings').findOne({ _id: postId });
     if (!post) {
@@ -62,7 +61,7 @@ export async function POST(
             postAuthor.name || 'User',
             commenter?.name || 'Someone',
             post.title,
-            params.id,
+            postIdRaw,
             content.trim().substring(0, 200),
           ]);
         } catch (e) {
