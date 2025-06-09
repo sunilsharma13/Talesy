@@ -16,10 +16,8 @@ function toObjectId(id: string | ObjectId) {
 
 export async function POST(
   request: Request,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
-  const { params } = context;
-
   try {
     const session = await getServerSession(authOptions);
     if (!session || !session.user) {
@@ -28,10 +26,6 @@ export async function POST(
 
     const currentUserId = session.user.id;
     const postId = params.id;
-
-    if (!postId) {
-      return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
-    }
 
     const client = await clientPromise;
     const db = client.db('talesy');
@@ -79,26 +73,19 @@ export async function POST(
       );
 
       if (post.userId !== currentUserId) {
-        let liker: WithId<Document> | null = null;
-        let author: WithId<Document> | null = null;
+        let liker = await db.collection('users').findOne({
+          _id: toObjectId(currentUserId),
+        });
 
-        try {
-          liker = await db.collection('users').findOne({
-            _id: toObjectId(currentUserId),
-          });
-        } catch (err) {
-          console.error('Failed to fetch liker:', err);
-        }
+        let author = await db.collection('users').findOne({
+          _id: toObjectId(post.userId),
+        });
 
-        try {
-          author = await db.collection('users').findOne({
-            _id: toObjectId(post.userId),
-          });
-        } catch (err) {
-          console.error('Failed to fetch author:', err);
-        }
-
-        if (author && author.email && author.emailPreferences?.newLike !== false) {
+        if (
+          author &&
+          author.email &&
+          author.emailPreferences?.newLike !== false
+        ) {
           try {
             await sendTemplateEmail(author.email, 'newLike', [
               author.name || 'User',
@@ -106,8 +93,8 @@ export async function POST(
               post.title,
               postId,
             ]);
-          } catch (emailError) {
-            console.error('Failed to send like notification email:', emailError);
+          } catch (err) {
+            console.error('Failed to send like email:', err);
           }
         }
       }
@@ -118,7 +105,7 @@ export async function POST(
       });
     }
   } catch (error) {
-    console.error('Error in like API:', error);
+    console.error('Like API error:', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

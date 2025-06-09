@@ -16,10 +16,8 @@ function toObjectId(id: string | ObjectId) {
 
 export async function POST(
   request: Request,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
-  const { params } = context;
-
   try {
     const session = await getServerSession(authOptions);
     if (!session || !session.user) {
@@ -27,17 +25,7 @@ export async function POST(
     }
 
     const userId = session.user.id;
-
-    if (!userId || typeof userId !== 'string') {
-      console.error('Invalid userId:', userId);
-      return NextResponse.json({ error: 'Invalid user ID in session' }, { status: 400 });
-    }
-
     const postId = params.id;
-
-    if (!postId) {
-      return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
-    }
 
     const body = await request.json();
     const { content } = body;
@@ -71,24 +59,14 @@ export async function POST(
       { $inc: { comments: 1 } }
     );
 
-    let commenter: WithId<Document> | null = null;
-    try {
-      commenter = await db.collection('users').findOne({
-        _id: toObjectId(userId),
-      });
-    } catch (err) {
-      console.error('Failed to fetch commenter:', err);
-    }
+    let commenter = await db.collection('users').findOne({
+      _id: toObjectId(userId),
+    });
 
     if (post.userId !== userId) {
-      let postAuthorQuery;
-      try {
-        postAuthorQuery = { _id: toObjectId(post.userId) };
-      } catch {
-        postAuthorQuery = { _id: post.userId };
-      }
-
-      const postAuthor = await db.collection('users').findOne(postAuthorQuery);
+      const postAuthor = await db.collection('users').findOne({
+        _id: toObjectId(post.userId),
+      });
 
       if (
         postAuthor &&
@@ -104,7 +82,7 @@ export async function POST(
             content.trim().substring(0, 200),
           ]);
         } catch (emailError) {
-          console.error('Failed to send comment notification email:', emailError);
+          console.error('Failed to send comment email:', emailError);
         }
       }
     }
@@ -118,7 +96,7 @@ export async function POST(
       },
     });
   } catch (error) {
-    console.error('Error adding comment:', error);
+    console.error('Comment API error:', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
