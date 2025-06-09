@@ -1,67 +1,45 @@
-// Fix for the users/[id]/route.ts file
-// app/api/users/[id]/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongoClient';
 import { ObjectId } from 'mongodb';
 
-export async function GET(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(req: NextRequest) {
   try {
-    const userId = params.id;
+    const url = new URL(req.url);
+    const segments = url.pathname.split('/');
+    const userId = segments[3]; // /api/users/[id]
+
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
-    
+
     const client = await clientPromise;
     const db = client.db('talesy');
-    
-    // Find the user using a simple approach avoiding variable type issues
+    const userCollection = db.collection('users');
+
     let user = null;
-    
-    // Try with ObjectId if valid
+
+    // Find by _id only if valid ObjectId
     if (ObjectId.isValid(userId)) {
-      try {
-        // @ts-ignore - Ignore TypeScript error for _id type
-        user = await db.collection('users').findOne({ "_id": new ObjectId(userId) });
-      } catch (error) {
-        console.error("Error finding user by ObjectId:", error);
-      }
+      user = await userCollection.findOne({ _id: new ObjectId(userId) });
     }
-    
-    // If not found, try with string ID
+
+    // Fallback: try userId field (if your users have a custom `userId`)
     if (!user) {
-      try {
-        // @ts-ignore - Ignore TypeScript error for _id type
-        user = await db.collection('users').findOne({ "_id": userId });
-      } catch (error) {
-        console.error("Error finding user by string ID:", error);
-      }
+      user = await userCollection.findOne({ userId: userId });
     }
-    
-    // If still not found, try with userId field
-    if (!user) {
-      try {
-        user = await db.collection('users').findOne({ userId: userId });
-      } catch (error) {
-        console.error("Error finding user by userId field:", error);
-      }
-    }
-    
+
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
-    
-    // Return sanitized user information
+
     return NextResponse.json({
-      _id: user._id instanceof ObjectId ? user._id.toString() : user._id,
+      _id: user._id.toString(),
       name: user.name || 'Anonymous User',
       avatar: user.avatar || null,
-      bio: user.bio || null
+      bio: user.bio || null,
     });
   } catch (error) {
-    console.error('Error fetching user:', error);
+    console.error('GET /users/[id] error:', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
