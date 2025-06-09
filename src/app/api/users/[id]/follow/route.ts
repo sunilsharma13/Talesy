@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongoClient';
 import { ObjectId } from 'mongodb';
 import { getServerSession } from 'next-auth/next';
@@ -18,16 +18,10 @@ interface User {
   avatar?: string;
 }
 
-// Helper to create filter for both ObjectId and string _id
-function getUserIdFilter(id: string) {
-  return ObjectId.isValid(id) ? { _id: new ObjectId(id) } : { _id: id };
-}
-
 export async function GET(
-  req: Request,
-  context: { params: { id: string } }
+  req: NextRequest,
+  { params }: { params: { id: string } }
 ) {
-  const { params } = context;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -58,10 +52,9 @@ export async function GET(
 }
 
 export async function POST(
-  req: Request,
-  context: { params: { id: string } }
+  req: NextRequest,
+  { params }: { params: { id: string } }
 ) {
-  const { params } = context;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -80,9 +73,16 @@ export async function POST(
     const userCollection = db.collection<User>('users');
     const followCollection = db.collection('follows');
 
-    // Safe _id filters
-    const currentUser = await userCollection.findOne(getUserIdFilter(currentUserId));
-    const userToFollow = await userCollection.findOne(getUserIdFilter(userToFollowId));
+    const currentUserFilter = ObjectId.isValid(currentUserId)
+      ? { _id: new ObjectId(currentUserId) }
+      : { _id: currentUserId };
+
+    const userToFollowFilter = ObjectId.isValid(userToFollowId)
+      ? { _id: new ObjectId(userToFollowId) }
+      : { _id: userToFollowId };
+
+    const currentUser = await userCollection.findOne(currentUserFilter);
+    const userToFollow = await userCollection.findOne(userToFollowFilter);
 
     if (!currentUser || !userToFollow) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
