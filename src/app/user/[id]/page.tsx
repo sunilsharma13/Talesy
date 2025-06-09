@@ -1,3 +1,4 @@
+// app/user/[id]/page.tsx
 import UserPageClient from './UserPageClient';
 
 type Props = {

@@ -1,4 +1,5 @@
-'use client';
+// app/user/[id]/UserPageClient.tsx
+"use client";
 
 import { useEffect, useState } from 'react';
 
@@ -19,15 +20,9 @@ export default function UserPageClient({ userId }: { userId: string }) {
 
   useEffect(() => {
     async function fetchUserData() {
-      if (!userId) {
-        setError("User ID missing");
-        setLoading(false);
-        return;
-      }
-
       try {
         const userRes = await fetch(`/api/users/${userId}`);
-        if (!userRes.ok) throw new Error('Failed to fetch user');
+        if (!userRes.ok) throw new Error("Failed to fetch user");
         const userData = await userRes.json();
         setUser(userData);
 
@@ -42,9 +37,9 @@ export default function UserPageClient({ userId }: { userId: string }) {
           const followingData = await followingRes.json();
           setFollowingCount(followingData.count);
         }
-      } catch (error) {
-        console.error('Error fetching user:', error);
+      } catch (err) {
         setError("Error loading user");
+        console.error(err);
       } finally {
         setLoading(false);
       }
@@ -70,8 +65,7 @@ export default function UserPageClient({ userId }: { userId: string }) {
 
   return (
     <main className="p-6">
-      <h1 className="text-2xl font-bold mb-4">{user.name || 'Anonymous User'}</h1>
-
+      <h1 className="text-2xl font-bold mb-4">{user.name || "Anonymous User"}</h1>
       <div className="flex items-center mb-6">
         {user.avatar && (
           <img
@@ -82,10 +76,8 @@ export default function UserPageClient({ userId }: { userId: string }) {
             className="rounded-full mr-6"
           />
         )}
-
         <div>
           {user.bio && <p className="text-gray-300 mb-4">{user.bio}</p>}
-
           <div className="flex space-x-6">
             <div>
               <span className="text-xl font-bold">{followerCount}</span>
