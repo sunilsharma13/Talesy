@@ -3,68 +3,62 @@ import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongoClient";
 import { ObjectId } from "mongodb";
 
-export async function GET(req: Request) {
+export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const query = searchParams.get("q");
-    
-    if (!query) {
-      return NextResponse.json([], { status: 200 });
-    }
+    const { searchParams } = new URL(request.url);
+    const query = searchParams.get("q") || "";
 
     const client = await clientPromise;
     const db = client.db("talesy");
-    
-    // Create a case-insensitive regex search pattern
-    const searchPattern = new RegExp(query, 'i');
-    
-    // Search stories by title and content, only published ones
-    const stories = await db.collection("writings")
-      .find({
-        status: "published",
-        $or: [
-          { title: { $regex: searchPattern } },
-          { content: { $regex: searchPattern } },
-        ]
-      })
-      .sort({ createdAt: -1 })
-      .limit(15)
+
+    const posts = await db
+      .collection("writings")
+      .aggregate([
+        {
+          $match: {
+            published: true,
+            $or: [
+              { title: { $regex: query, $options: "i" } },
+              { content: { $regex: query, $options: "i" } },
+            ],
+          },
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "userId",
+            foreignField: "_id",
+            as: "user",
+          },
+        },
+        {
+          $unwind: {
+            path: "$user",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $project: {
+            title: 1,
+            content: 1,
+            createdAt: 1,
+            imageUrl: 1,
+            likes: 1,
+            comments: 1,
+            userId: 1,
+            user: {
+              name: "$user.name",
+              avatar: "$user.avatar",
+            },
+          },
+        },
+        { $sort: { createdAt: -1 } },
+      ])
       .toArray();
-    
-    // Enhance stories with author information
-    const enhancedStories = await Promise.all(
-      stories.map(async (story) => {
-        const userId = story.userId;
-        
-        // Get user data
-        const userIdFilter = ObjectId.isValid(userId) 
-          ? { _id: new ObjectId(userId) } 
-          : { _id: userId };
-          
-        const user = await db.collection("users").findOne(
-          userIdFilter,
-          { projection: { _id: 1, name: 1, avatar: 1 } }
-        );
-        
-        // Add like and comment counts
-        const likeCount = await db.collection("likes")
-          .countDocuments({ postId: story._id.toString() });
-          
-        const commentCount = await db.collection("comments")
-          .countDocuments({ postId: story._id.toString() });
-        
-        return {
-          ...story,
-          likes: likeCount,
-          comments: commentCount,
-          user: user || { name: "Unknown User" }
-        };
-      })
-    );
-    
-    return NextResponse.json(enhancedStories);
+
+    return NextResponse.json(posts);
   } catch (error) {
-    console.error("Error in posts search API:", error);
-    return NextResponse.json({ error: "Failed to search stories" }, { status: 500 });
+    console.error("Post search failed:", error);
+    return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
   }
 }

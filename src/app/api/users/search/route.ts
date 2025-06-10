@@ -2,41 +2,25 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongoClient";
 
-export async function GET(req: Request) {
+export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const query = searchParams.get("q");
-    
-    if (!query) {
-      return NextResponse.json([], { status: 200 });
-    }
+    const { searchParams } = new URL(request.url);
+    const query = searchParams.get("q") || "";
 
     const client = await clientPromise;
     const db = client.db("talesy");
-    
-    // Create a case-insensitive regex search pattern
-    const searchPattern = new RegExp(query, 'i');
-    
-    // Search users by name and bio
-    const users = await db.collection("users")
+
+    const users = await db
+      .collection("users")
       .find({
-        $or: [
-          { name: { $regex: searchPattern } },
-          { bio: { $regex: searchPattern } },
-        ]
+        name: { $regex: query, $options: "i" },
       })
-      .project({
-        _id: 1,
-        name: 1,
-        avatar: 1,
-        bio: 1,
-      })
-      .limit(15)
+      .project({ password: 0 }) // never return password
       .toArray();
-    
+
     return NextResponse.json(users);
   } catch (error) {
-    console.error("Error in users search API:", error);
-    return NextResponse.json({ error: "Failed to search users" }, { status: 500 });
+    console.error("User search failed:", error);
+    return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
   }
 }
