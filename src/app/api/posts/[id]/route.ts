@@ -5,7 +5,42 @@ import { ObjectId } from 'mongodb';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 
-export async function DELETE(request: Request) {
+export async function GET(request: Request, { params }: { params: { id: string } }) {
+  try {
+    // Get the post ID from params
+    const postId = params.id;
+
+    if (!ObjectId.isValid(postId)) {
+      return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
+    }
+
+    const client = await clientPromise;
+    const db = client.db('talesy');
+    const writingsCollection = db.collection('writings');
+
+    // Find the post by ID
+    const post = await writingsCollection.findOne({
+      _id: new ObjectId(postId)
+    });
+
+    if (!post) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    }
+
+    return NextResponse.json(post);
+  } catch (error) {
+    console.error('Error fetching post:', error);
+    return NextResponse.json(
+      {
+        error: 'Server error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   try {
     // Authenticate the user
     const session = await getServerSession(authOptions);
@@ -13,10 +48,8 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get the post ID from the URL
-    const url = new URL(request.url);
-    const parts = url.pathname.split('/');
-    const postId = parts[parts.length - 1];
+    // Get the post ID from params
+    const postId = params.id;
 
     if (!ObjectId.isValid(postId)) {
       return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });

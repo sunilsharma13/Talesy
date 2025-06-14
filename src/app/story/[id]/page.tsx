@@ -1,582 +1,283 @@
-// app/story/[id]/page.tsx
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { toast } from 'react-hot-toast';
+import { useRouter, useSearchParams, useParams } from "next/navigation";
+import { storage } from "@/lib/firebase";
+import { deleteObject, ref } from "firebase/storage";
+import StoryCard from "@/components/StoryCard";
+import CommentSection from "@/components/CommentSection";
+import { toast } from "react-hot-toast";
 
 interface Story {
   _id: string;
   title: string;
   content: string;
-  imageUrl?: string;
-  userId: string;
+  imageUrl: string;
+  status: "draft" | "published";
   createdAt: string;
-  updatedAt?: string;
-  likes: number;
-  comments: number;
-  user?: {
-    name: string;
-    avatar?: string;
-  };
-}
-
-interface User {
-  _id: string;
-  name: string;
-  avatar?: string;
-}
-
-interface Comment {
-  _id: string;
-  content: string;
+  likes?: number;
+  comments?: number;
   userId: string;
-  postId: string;
-  createdAt: string;
-  user: {
-    name: string;
-    avatar?: string;
-  };
 }
 
-export default function StoryPage({ params }: { params: any }) {
-  // Extract the ID from params
-  const id = params?.id;
-  
+export default function StoryDetailPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const shouldOpenComments = searchParams.get("openComments") === "true";
-  
+  const params = useParams(); // Use this hook instead of prop destructuring
+  const openComments = searchParams?.get("openComments") === "true";
+
   const [story, setStory] = useState<Story | null>(null);
-  const [author, setAuthor] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [liked, setLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(0);
-  const [commentCount, setCommentCount] = useState(0);
-  const [likeLoading, setLikeLoading] = useState(false);
-  
-  // Comments
-  const [showComments, setShowComments] = useState(false);
-  const [commentText, setCommentText] = useState("");
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [commentsLoading, setCommentsLoading] = useState(false);
-  const [commentSubmitting, setCommentSubmitting] = useState(false);
-  
-  const commentInputRef = useRef<HTMLTextAreaElement>(null);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [likeLoading, setLikeLoading] = useState<string | null>(null);
+  const [showComments, setShowComments] = useState(openComments);
+
+  // Use the params from the useParams hook
+  const storyId = params.id as string;
 
   useEffect(() => {
-    // Open comments section if URL param is set
-    if (shouldOpenComments) {
-      setShowComments(true);
-    }
-  }, [shouldOpenComments]);
-
-  useEffect(() => {
-    // Guard against undefined ID
-    if (!id) {
-      setError("Missing story ID");
-      setLoading(false);
-      return;
-    }
-    
     const fetchStory = async () => {
       try {
         setLoading(true);
-        
-        // Fetch story data
-        const storyRes = await fetch(`/api/posts/${id}`);
-        
-        if (!storyRes.ok) {
-          console.error(`Failed to fetch story with status: ${storyRes.status}`);
-          toast.error("Failed to load story");
-          throw new Error("Failed to fetch story");
-        }
-        
-        const storyData = await storyRes.json();
-        setStory(storyData);
-        
-        // Set initial counts
-        setLikeCount(storyData.likes || 0);
-        setCommentCount(storyData.comments || 0);
-        
-        // Fetch author data
-        if (storyData.userId) {
-          const authorRes = await fetch(`/api/users/${storyData.userId}`);
-          if (authorRes.ok) {
-            const authorData = await authorRes.json();
-            setAuthor(authorData);
-          }
-        }
-        
-        // Check if user has liked this post
-        if (session?.user?.id) {
-          try {
-            const likeStatusRes = await fetch(`/api/posts/${id}/like/status`);
-            if (likeStatusRes.ok) {
-              const likeData = await likeStatusRes.json();
-              setLiked(likeData.liked);
-            }
-          } catch (likeError) {
-            console.error("Error checking like status:", likeError);
-            // Continue even if like check fails
-          }
-        }
-        
-      } catch (err) {
-        console.error("Error fetching story:", err);
-        setError("Failed to load story. Please try again later.");
+        const res = await fetch(`/api/posts/${storyId}`);
+        if (!res.ok) throw new Error(`Failed to fetch story: ${res.statusText}`);
+        const data = await res.json();
+        setStory(data);
+      } catch (error) {
+        console.error("Error fetching story:", error);
+        toast.error("Failed to load story.");
       } finally {
         setLoading(false);
       }
     };
-    
-    fetchStory();
-  }, [id, session?.user?.id]);
-  
-  // Fetch comments when comments section is opened
-  useEffect(() => {
-    // Guard against undefined ID or when comments aren't shown
-    if (!id || !showComments) return;
-    
-    const fetchComments = async () => {
-      try {
-        setCommentsLoading(true);
-        
-        const res = await fetch(`/api/posts/${id}/comments`);
-        
-        if (!res.ok) {
-          console.error(`Failed to fetch comments with status: ${res.status}`);
-          toast.error("Failed to load comments");
-          throw new Error("Failed to fetch comments");
-        }
-        
-        const data = await res.json();
-        setComments(data);
-      } catch (error) {
-        console.error("Error fetching comments:", error);
-      } finally {
-        setCommentsLoading(false);
-      }
-    };
-    
-    fetchComments();
-  }, [showComments, id]);
 
-  // For the handleLike function in story/[id]/page.tsx
-const handleLike = async () => {
-  if (!session?.user) {
-    router.push('/login');
-    return;
-  }
-  
-  if (!id) return;
-  
-  setLikeLoading(true);
-  
-  // Store current state before optimistic update
-  const wasLiked = liked;
-  const currentCount = likeCount;
-  
-  try {
-    // Optimistic update
-    setLiked(!wasLiked);
-    setLikeCount(wasLiked ? currentCount - 1 : currentCount + 1);
-    
-    const res = await fetch(`/api/posts/${id}/like`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    if (res.ok) {
-      const data = await res.json();
-      setLiked(data.liked);
-      setLikeCount(data.count);
-    } else {
-      // Revert optimistic update on error
-      setLiked(wasLiked);
-      setLikeCount(currentCount);
-      console.error("Failed to like post");
-    }
-  } catch (error) {
-    // Revert optimistic update on error
-    setLiked(wasLiked);
-    setLikeCount(currentCount);
-    console.error('Error liking post:', error);
-  } finally {
-    setLikeLoading(false);
-  }
-};
-  
+    if (storyId) fetchStory();
+  }, [storyId]);
+
   const toggleComments = () => {
-    setShowComments(prev => !prev);
-    // Focus the comment input when opening comments
-    if (!showComments && commentInputRef.current) {
-      setTimeout(() => {
-        commentInputRef.current?.focus();
-      }, 100);
+    setShowComments((prev) => !prev);
+  };
+
+  const formatDate = (dateString: string): string => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    } catch {
+      return "";
     }
   };
-  
-  const handleCommentSubmit = async (e: React.FormEvent) => {
+
+  const getExcerpt = (content: string, maxWords: number = 30): string => {
+    if (!content) return "";
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = content;
+    const plainText = tempDiv.textContent || tempDiv.innerText || "";
+    const words = plainText.trim().split(/\s+/);
+    return words.length <= maxWords ? plainText : words.slice(0, maxWords).join(" ") + "…";
+  };
+
+  const handleDelete = async (id: string, imageUrl: string) => {
+    if (!confirm("Are you sure you want to delete this story?")) return;
+
+    try {
+      setDeleteLoading(id);
+      console.log(`Deleting story with ID: ${id}`);
+
+      // Delete image
+      if (imageUrl) {
+        try {
+          if (imageUrl.startsWith("/uploads/")) {
+            const imgRes = await fetch("/api/upload/delete", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ filePath: imageUrl }),
+            });
+            console.log("Image deletion result:", imgRes.ok ? "Success" : "Failed");
+          } else if (imageUrl.includes("firebase")) {
+            const imageRef = ref(storage, imageUrl);
+            await deleteObject(imageRef);
+            console.log("Firebase image deleted");
+          }
+        } catch (imageError) {
+          console.error("Image delete error:", imageError);
+        }
+      }
+
+      const res = await fetch(`/api/posts/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (e) {
+        console.error("Error parsing response:", e);
+      }
+
+      if (!res.ok) {
+        throw new Error((data as any).error || (data as any).details || "Failed to delete post");
+      }
+
+      toast.success("Story deleted successfully!");
+      router.push("/dashboard");
+    } catch (error) {
+      console.error("Delete error:", error);
+      toast.error(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setDeleteLoading(null);
+    }
+  };
+
+  const handleLike = async (id: string, e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     
     if (!session?.user) {
       router.push('/login');
       return;
     }
     
-    if (!commentText.trim() || !id) return;
-    
-    setCommentSubmitting(true);
+    if (likeLoading) return;
+    setLikeLoading(id);
     
     try {
-      const res = await fetch(`/api/posts/${id}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ content: commentText })
+      const res = await fetch(`/api/posts/${id}/like`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to like story: ${res.statusText}`);
+      }
+
+      const data = await res.json();
+      
+      // Update the story's like count based on server response
+      setStory(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          likes: data.liked ? (prev.likes || 0) + 1 : Math.max((prev.likes || 0) - 1, 0)
+        };
       });
       
-      if (res.ok) {
-        const newComment = await res.json();
-        
-        // Add the new comment to the list
-        setComments(prevComments => [newComment, ...prevComments]);
-        
-        // Clear the input
-        setCommentText("");
-        
-        // Update comment count
-        setCommentCount(prev => prev + 1);
-        
-        toast.success("Comment added");
+      if (data.liked) {
+        toast.success("Story liked!");
       } else {
-        toast.error("Failed to add comment");
-        console.error("Failed to add comment");
+        toast.success("Like removed!");
       }
     } catch (error) {
-      console.error('Error adding comment:', error);
-      toast.error("Something went wrong");
+      console.error("Error liking post:", error);
+      toast.error("Failed to update like status.");
     } finally {
-      setCommentSubmitting(false);
+      setLikeLoading(null);
     }
-  };
-  
-  // Format date for display
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-  };
-  
-  // Format comment date
-  const formatCommentDate = (dateString: string) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-    
-    if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    
-    return formatDate(dateString);
-  };
-
-  // Process HTML content for rendering
-  const processContent = (content: string) => {
-    if (!content) return '';
-    
-    // If content is already in HTML format (contains tags), return as is
-    if (/<\/?[a-z][\s\S]*>/i.test(content)) {
-      return content;
-    }
-    
-    // Convert markdown headings
-    let formattedContent = content
-      .replace(/^### (.*$)/gm, '<h3 class="text-xl font-bold mt-6 mb-2">$1</h3>')
-      .replace(/^## (.*$)/gm, '<h2 class="text-2xl font-bold mt-8 mb-3">$1</h2>')
-      .replace(/^# (.*$)/gm, '<h1 class="text-3xl font-bold mt-10 mb-4">$1</h1>')
-      
-      // Convert markdown paragraphs and line breaks
-      .replace(/\n\n/g, '</p><p class="mb-4">')
-      
-      // Convert bold and italic
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      
-      // Convert links
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">$1</a>')
-      
-      // Convert images
-      .replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" class="my-4 max-w-full h-auto rounded" />');
-    
-    return `<p class="mb-4">${formattedContent}</p>`;
   };
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto p-6 animate-pulse">
-        <div className="h-8 bg-gray-700 rounded w-3/4 mb-6"></div>
-        <div className="flex items-center mb-8">
-          <div className="w-10 h-10 bg-gray-700 rounded-full mr-3"></div>
-          <div className="h-4 bg-gray-700 rounded w-32"></div>
-        </div>
-        <div className="space-y-4">
-          <div className="h-4 bg-gray-700 rounded w-full"></div>
-          <div className="h-4 bg-gray-700 rounded w-full"></div>
-          <div className="h-4 bg-gray-700 rounded w-3/4"></div>
-          <div className="h-48 bg-gray-700 rounded w-full mt-6"></div>
-          <div className="h-4 bg-gray-700 rounded w-full"></div>
-          <div className="h-4 bg-gray-700 rounded w-full"></div>
+      <div className="min-h-screen bg-gray-900 py-10 px-6">
+        <div className="max-w-3xl mx-auto">
+          <div className="animate-pulse">
+            <div className="h-10 bg-gray-700 rounded w-3/4 mb-6"></div>
+            <div className="h-64 bg-gray-800 rounded-lg mb-6"></div>
+            <div className="space-y-3">
+              <div className="h-4 bg-gray-700 rounded w-full"></div>
+              <div className="h-4 bg-gray-700 rounded w-5/6"></div>
+              <div className="h-4 bg-gray-700 rounded w-4/6"></div>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
-  if (error || !story) {
+  if (!story) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="bg-red-900/20 text-red-300 p-4 rounded-lg">
-          {error || "Story not found"}
-        </div>
-        <div className="mt-6 text-center">
-          <Link 
-            href="/feed"
-            className="text-indigo-400 hover:text-indigo-300"
+      <div className="min-h-screen bg-gray-900 py-10 px-6 flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-white mb-4">Story Not Found</h2>
+          <p className="text-gray-400 mb-6">The story you're looking for doesn't seem to exist.</p>
+          <button 
+            onClick={() => router.push("/dashboard")}
+            className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
           >
-            ← Back to Feed
-          </Link>
+            Go to Dashboard
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <main className="max-w-4xl mx-auto p-6">
-      {/* Story header */}
-      <header className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-bold text-white mb-4">
-          {story.title}
-        </h1>
-        
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            {author && (
-              <Link 
-                href={`/profile/${author._id}`}
-                className="flex items-center hover:opacity-90 transition-opacity"
-              >
-                <img
-                  src={author.avatar || "/default-avatar.png"}
-                  alt={author.name}
-                  className="w-10 h-10 rounded-full object-cover border border-gray-700"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = "/default-avatar.png";
-                  }}
-                />
-                <div className="ml-3">
-                  <p className="font-medium text-white hover:underline">{author.name}</p>
-                  <p className="text-xs text-gray-400">{formatDate(story.createdAt)}</p>
-                </div>
-              </Link>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-4">
-            <button
-              onClick={handleLike}
-              disabled={likeLoading}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-colors ${
-                liked ? "bg-red-900/30 text-red-400" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
-              }`}
-            >
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                className={`h-4 w-4 ${liked ? "text-red-500" : "text-gray-500"}`} 
-                viewBox="0 0 20 20" 
-                fill="currentColor"
-              >
-                <path 
-                  fillRule="evenodd" 
-                  d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" 
-                  clipRule="evenodd" 
-                />
-              </svg>
-              <span>{likeCount}</span>
-            </button>
-            
-            <button
-              onClick={toggleComments}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-colors ${
-                showComments ? "bg-blue-900/30 text-blue-400" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
-              }`}
-            >
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                className={`h-4 w-4 ${showComments ? "text-blue-500" : "text-gray-500"}`}
-                viewBox="0 0 20 20" 
-                fill="currentColor"
-              >
-                <path 
-                  fillRule="evenodd" 
-                  d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" 
-                  clipRule="evenodd" 
-                />
-              </svg>
-              <span>{commentCount}</span>
-            </button>
-          </div>
-        </div>
-      </header>
-      
-      {/* Featured Image */}
-      {story.imageUrl && (
+    <div className="min-h-screen bg-gray-900 py-10 px-6">
+      <div className="max-w-3xl mx-auto">
         <div className="mb-8">
-          <img
-            src={story.imageUrl}
-            alt={story.title}
-            className="w-full h-auto max-h-[500px] object-cover rounded-xl border border-gray-700"
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.src = "/placeholder-image.jpg";
-              target.classList.add("hidden");
-            }}
-          />
+          <button 
+            onClick={() => router.push("/dashboard")} 
+            className="flex items-center text-indigo-400 hover:text-indigo-300 transition-colors mb-4"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+            Back to Dashboard
+          </button>
+          
+          <h1 className="text-3xl font-bold text-white">{story.title}</h1>
         </div>
-      )}
-      
-      {/* Story Content */}
-      <article className="prose prose-invert lg:prose-lg max-w-none mb-10">
-        <div dangerouslySetInnerHTML={{ __html: processContent(story.content) }} />
-      </article>
-      
-      {/* Comments Section */}
-      {showComments && (
-        <section className="mt-10 border-t border-gray-700 pt-6">
-          <h2 className="text-2xl font-bold text-white mb-6">Comments {commentCount > 0 && `(${commentCount})`}</h2>
-          
-          {session?.user ? (
-            <form onSubmit={handleCommentSubmit} className="mb-8">
-              <div className="flex items-start gap-3">
-                <img
-                  src={session.user.avatar || session.user.image || "/default-avatar.png"}
-                  alt={session.user.name || "User"}
-                  className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = "/default-avatar.png";
-                  }}
-                />
-                <div className="flex-1">
-                  <textarea
-                    ref={commentInputRef}
-                    value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
-                    placeholder="Add a comment..."
-                    className="w-full rounded-lg bg-gray-800 border border-gray-700 px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-                    rows={3}
-                    required
-                  ></textarea>
-                  <div className="flex justify-end mt-2">
-                    <button
-                      type="submit"
-                      disabled={commentSubmitting || !commentText.trim()}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-700 disabled:text-gray-400 text-white text-sm font-medium rounded-lg transition-colors duration-200"
-                    >
-                      {commentSubmitting ? 'Posting...' : 'Post Comment'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </form>
-          ) : (
-            <div className="mb-8 p-4 bg-gray-800 rounded-lg text-center">
-              <p className="text-gray-400 mb-2">Please sign in to post a comment</p>
-              <Link
-                href="/login"
-                className="inline-block px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors duration-200"
-              >
-                Sign In
-              </Link>
-            </div>
-          )}
-          
-          {/* Comment List */}
-          {commentsLoading ? (
-            <div className="space-y-6 animate-pulse">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="flex gap-3">
-                  <div className="w-10 h-10 bg-gray-700 rounded-full flex-shrink-0"></div>
-                  <div className="flex-1">
-                    <div className="h-4 bg-gray-700 rounded w-32 mb-2"></div>
-                    <div className="h-3 bg-gray-700 rounded w-20 mb-3"></div>
-                    <div className="h-4 bg-gray-700 rounded w-full mb-2"></div>
-                    <div className="h-4 bg-gray-700 rounded w-3/4"></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : comments.length === 0 ? (
-            <div className="text-center py-8 bg-gray-800 rounded-lg">
-              <p className="text-gray-400">No comments yet. Be the first to comment!</p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {comments.map(comment => (
-                <div key={comment._id} className="flex gap-3">
-                  <Link
-                    href={`/profile/${comment.userId}`}
-                    className="flex-shrink-0"
-                  >
-                    <img
-                      src={comment.user?.avatar || "/default-avatar.png"}
-                      alt={comment.user?.name || "User"}
-                      className="w-10 h-10 rounded-full object-cover"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = "/default-avatar.png";
-                      }}
-                    />
-                  </Link>
-                  <div className="flex-1">
-                    <div className="flex items-baseline gap-2 mb-1">
-                      <Link
-                        href={`/profile/${comment.userId}`}
-                        className="font-medium text-white hover:underline"
-                      >
-                        {comment.user?.name || "Anonymous"}
-                      </Link>
-                      <span className="text-xs text-gray-500">
-                        {formatCommentDate(comment.createdAt)}
-                      </span>
-                    </div>
-                    <p className="text-gray-300 whitespace-pre-wrap">
-                      {comment.content}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-    </main>
+
+        <StoryCard
+          _id={story._id}
+          title={story.title}
+          content={story.content}
+          imageUrl={story.imageUrl}
+          userId={story.userId}
+          createdAt={story.createdAt}
+          likes={story.likes}
+          comments={story.comments}
+          status={story.status}
+          deleteLoading={deleteLoading === story._id}
+          likeLoading={likeLoading === story._id}
+          onDelete={(id, imgUrl) => handleDelete(id, imgUrl!)}
+          onLike={handleLike}
+          onComment={toggleComments}
+          formatDate={formatDate}
+          getExcerpt={getExcerpt}
+        />
+
+        <div className="mt-6">
+          <button
+            onClick={toggleComments}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
+          >
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className="h-5 w-5" 
+              viewBox="0 0 20 20" 
+              fill="currentColor"
+            >
+              <path 
+                fillRule="evenodd" 
+                d={showComments 
+                  ? "M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" 
+                  : "M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z"
+                } 
+                clipRule="evenodd" 
+              />
+            </svg>
+            {showComments ? "Hide Comments" : "Show Comments"}
+          </button>
+        </div>
+
+        {showComments && <CommentSection postId={story._id} />}
+      </div>
+    </div>
   );
 }

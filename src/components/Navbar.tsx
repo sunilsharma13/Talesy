@@ -184,7 +184,7 @@ export default function Navbar() {
   };
 
   const navLinks: NavLink[] = [
-    { name: "Home", href: "/" },
+    { name: "Home", href: "/homepage" },
     { name: "Feed", href: "/feed" },
     { name: "Write", href: "/write/new" },
     { name: "Dashboard", href: "/dashboard" },
@@ -200,9 +200,11 @@ export default function Navbar() {
     ? "bg-gradient-to-r from-[#0e0e2c] via-[#1a1a3a] to-[#252550]"
     : "bg-white border-b border-gray-200 text-gray-800";
 
-    const handleNavigation = (path: string) => {
-      window.location.href = path;
-    };
+// Fix the handleNavigation function in your Navbar
+const handleNavigation = (path: string) => {
+  // Use window.location for navigation to prevent router issues
+  window.location.href = path;
+};
 
   return (
     <nav className={`${navBarBg} shadow-lg sticky top-0 z-50 transition-colors`}>
@@ -210,11 +212,11 @@ export default function Navbar() {
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             <a 
-              href="/" 
+              href="/landing" 
               className="flex items-center gap-3 transition-transform hover:scale-105"
               onClick={(e) => {
                 e.preventDefault();
-                handleNavigation("/");
+                handleNavigation("/landing");
               }}
             >
               <img 

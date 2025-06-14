@@ -11,52 +11,79 @@ function toObjectId(id: string | ObjectId) {
   throw new Error('Invalid ObjectId');
 }
 
-export async function POST(request: Request) {
+export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
+    console.log("Session:", session);
+    console.log("User ID:", session?.user?.id);
+
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const url = new URL(request.url);
-    const postIdRaw = url.pathname.split('/')[4];
-    const postId = toObjectId(postIdRaw);
+    const postIdRaw = params.id;
+
+    if (!ObjectId.isValid(postIdRaw)) {
+      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 });
+    }
+    
+    const postId = new ObjectId(postIdRaw);
     const userId = session.user.id;
 
     const client = await clientPromise;
     const db = client.db('talesy');
 
+    // Check if the post exists
     const post = await db.collection('writings').findOne({ _id: postId });
     if (!post) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    const existingLike = await db.collection('likes').findOne({ postId, userId });
+    console.log("Checking existing likes...");
+    
+    // Check if the user has already liked this post
+    const existingLike = await db.collection('likes').findOne({ 
+      postId: postIdRaw,
+      userId 
+    });
+
+    console.log("Existing like check:", existingLike);
 
     if (existingLike) {
+      console.log("User already liked this post, removing like...");
+      // User has already liked, so remove the like
       await db.collection('likes').deleteOne({ _id: existingLike._id });
+      
+      // Decrement the like count in the post
       const result = await db.collection('writings').findOneAndUpdate(
         { _id: postId },
         { $inc: { likes: -1 } },
         { returnDocument: 'after' }
       );
 
+      console.log("Like removed, updated post:", result.value);
+
       return NextResponse.json({
         liked: false,
         count: result.value?.likes || 0,
       });
     } else {
+      console.log("Adding new like");
+      // User hasn't liked, so add a new like
       await db.collection('likes').insertOne({
-        postId,
+        postId: postIdRaw,
         userId,
         createdAt: new Date(),
       });
 
+      // Increment the like count in the post
       const result = await db.collection('writings').findOneAndUpdate(
         { _id: postId },
         { $inc: { likes: 1 } },
         { returnDocument: 'after' }
       );
+
+      console.log("Like added, updated post:", result.value);
 
       if (post.userId !== userId) {
         const author = await db.collection('users').findOne({ _id: toObjectId(post.userId) });
@@ -85,7 +112,15 @@ export async function POST(request: Request) {
       });
     }
   } catch (err) {
-    console.error('Like API error:', err);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    console.error('Like API error:', {
+      error: err,
+      message: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined
+    });
+    
+    return NextResponse.json({ 
+      error: 'Server error', 
+      details: err instanceof Error ? err.message : 'Unknown error' 
+    }, { status: 500 });
   }
 }

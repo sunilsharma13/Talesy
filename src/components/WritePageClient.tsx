@@ -1,4 +1,4 @@
-// components/WritePageClient.tsx
+// components/WritePageClient.tsx (corrected version)
 "use client";
 
 import { useSession } from "next-auth/react";
@@ -12,7 +12,6 @@ export default function WritePageClient() {
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
   const [coverImage, setCoverImage] = useState("");
   const [tagsInput, setTagsInput] = useState("");
   const [statusPost, setStatusPost] = useState<"draft" | "published">("draft");
@@ -20,6 +19,9 @@ export default function WritePageClient() {
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [showCoverUpload, setShowCoverUpload] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  
+  // Format buttons active state
+  const [activeFormats, setActiveFormats] = useState<string[]>([]);
 
   const editorRef = useRef<HTMLDivElement>(null);
   const canSave = !!session?.user?.id;
@@ -78,7 +80,7 @@ export default function WritePageClient() {
 
     setIsSaving(true);
     try {
-      const res = await fetch("/api/posts", {
+      const res = await fetch("/api/writing", {  // Changed to correct endpoint
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -116,22 +118,17 @@ export default function WritePageClient() {
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
-        if (editorRef.current.contains(range.commonAncestorContainer)) {
-          range.deleteContents();
-          range.insertNode(img);
-        } else {
-          editorRef.current.appendChild(img);
-        }
+        range.deleteContents();
+        range.insertNode(img);
+        
+        // Add a line break after the image (fixed)
+        const br = document.createElement('br');
+        // Directly insert after the image
+        img.parentNode?.insertBefore(br, img.nextSibling);
       } else {
         editorRef.current.appendChild(img);
-      }
-      
-      // Add a line break after the image
-      const br = document.createElement('br');
-      if (img.nextSibling) {
-        editorRef.current.insertBefore(br, img.nextSibling);
-      } else {
-        editorRef.current.appendChild(br);
+        // Add a line break
+        editorRef.current.appendChild(document.createElement('br'));
       }
       
       editorRef.current.focus();
@@ -147,83 +144,27 @@ export default function WritePageClient() {
     toast.success("Cover image uploaded");
   };
 
-  // Format text (bold, italic, etc)
-  const formatText = (command: string, value: string | null = null) => {
-    document.execCommand(command, false, value || undefined);
-    if (editorRef.current) {
-      editorRef.current.focus();
-    }
-  };
-
-  // Insert a heading
-  const insertHeading = (level: number) => {
-    // Focus the editor if not already focused
-    editorRef.current?.focus();
+  // Format text (bold, italic)
+  // In WritePageClient.tsx, update the formatText function
+const formatText = (command: string) => {
+  document.execCommand(command, false);
+  
+  // Update active formats
+  if (activeFormats.includes(command)) {
+    setActiveFormats(activeFormats.filter(f => f !== command));
+  } else {
+    setActiveFormats([...activeFormats, command]);
+  }
+  
+  if (editorRef.current) {
+    editorRef.current.focus();
     
-    // Create a new heading element
-    const headingTag = `h${level}`;
-    const selection = window.getSelection();
-    
-    if (selection && selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      const selectedText = range.toString() || `Heading ${level}`;
-      
-      // Extract the containing block element
-      let container = range.commonAncestorContainer;
-      while (container && container.nodeType === 3) {
-        container = container.parentNode as Node;
-      }
-      
-      // Check if we're already inside a heading
-      const currentHeading = 
-        container?.nodeName === 'H1' || 
-        container?.nodeName === 'H2' || 
-        container?.nodeName === 'H3';
-      
-      // If in a heading already, just replace its content
-      if (currentHeading && container.parentNode === editorRef.current) {
-        // Replace the heading with a new one of the selected level
-        const newHeading = document.createElement(headingTag);
-        newHeading.textContent = selectedText;
-        container.parentNode?.replaceChild(newHeading, container);
-        
-        // Place cursor at the end of the new heading
-        const newRange = document.createRange();
-        newRange.selectNodeContents(newHeading);
-        newRange.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(newRange);
-      } else {
-        // Not in a heading, create a new one
-        document.execCommand('formatBlock', false, headingTag);
-      }
-    } else {
-      // No selection, just insert a heading
-      document.execCommand('formatBlock', false, headingTag);
+    // Save the current HTML to state
+    if (editorRef.current.innerHTML) {
+      setContent(editorRef.current.innerHTML);
     }
-  };
-
-  // Insert a list (numbered or bulleted)
-  const insertList = (type: 'ordered' | 'unordered') => {
-    if (type === 'ordered') {
-      document.execCommand('insertOrderedList');
-    } else {
-      document.execCommand('insertUnorderedList');
-    }
-    
-    if (editorRef.current) {
-      editorRef.current.focus();
-    }
-  };
-
-  // Insert a paragraph break
-  const insertParagraph = () => {
-    document.execCommand('formatBlock', false, 'p');
-    if (editorRef.current) {
-      editorRef.current.focus();
-    }
-  };
-
+  }
+};
   return (
     <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} transition-colors duration-300`}>
       {/* Theme toggle and save buttons */}
@@ -316,12 +257,14 @@ export default function WritePageClient() {
           onChange={(e) => setTitle(e.target.value)}
         />
         
-        {/* Formatting toolbar */}
+        {/* Simplified formatting toolbar */}
         <div className="mb-4 flex flex-wrap gap-2 border-b border-gray-700 pb-3">
           <button
             onClick={() => formatText('bold')}
             className={`px-3 py-1.5 rounded text-sm font-bold ${
-              theme === 'dark' ? 'hover:bg-indigo-900/50' : 'hover:bg-indigo-100'
+              activeFormats.includes('bold') 
+                ? theme === 'dark' ? 'bg-indigo-900' : 'bg-indigo-200'
+                : theme === 'dark' ? 'hover:bg-indigo-900/50' : 'hover:bg-indigo-100'
             }`}
             title="Bold"
           >
@@ -330,65 +273,13 @@ export default function WritePageClient() {
           <button
             onClick={() => formatText('italic')}
             className={`px-3 py-1.5 rounded text-sm italic ${
-              theme === 'dark' ? 'hover:bg-indigo-900/50' : 'hover:bg-indigo-100'
+              activeFormats.includes('italic') 
+                ? theme === 'dark' ? 'bg-indigo-900' : 'bg-indigo-200'
+                : theme === 'dark' ? 'hover:bg-indigo-900/50' : 'hover:bg-indigo-100'
             }`}
             title="Italic"
           >
             I
-          </button>
-          <button
-            onClick={() => insertHeading(1)}
-            className={`px-3 py-1.5 rounded text-sm font-bold ${
-              theme === 'dark' ? 'hover:bg-indigo-900/50' : 'hover:bg-indigo-100'
-            }`}
-            title="Heading 1"
-          >
-            H1
-          </button>
-          <button
-            onClick={() => insertHeading(2)}
-            className={`px-3 py-1.5 rounded text-sm font-bold ${
-              theme === 'dark' ? 'hover:bg-indigo-900/50' : 'hover:bg-indigo-100'
-            }`}
-            title="Heading 2"
-          >
-            H2
-          </button>
-          <button
-            onClick={() => insertHeading(3)}
-            className={`px-3 py-1.5 rounded text-sm font-bold ${
-              theme === 'dark' ? 'hover:bg-indigo-900/50' : 'hover:bg-indigo-100'
-            }`}
-            title="Heading 3"
-          >
-            H3
-          </button>
-          <button
-            onClick={() => insertList('unordered')}
-            className={`px-3 py-1.5 rounded text-sm ${
-              theme === 'dark' ? 'hover:bg-indigo-900/50' : 'hover:bg-indigo-100'
-            }`}
-            title="Bullet List"
-          >
-            •
-          </button>
-          <button
-            onClick={() => insertList('ordered')}
-            className={`px-3 py-1.5 rounded text-sm ${
-              theme === 'dark' ? 'hover:bg-indigo-900/50' : 'hover:bg-indigo-100'
-            }`}
-            title="Numbered List"
-          >
-            1.
-          </button>
-          <button
-            onClick={insertParagraph}
-            className={`px-3 py-1.5 rounded text-sm ${
-              theme === 'dark' ? 'hover:bg-indigo-900/50' : 'hover:bg-indigo-100'
-            }`}
-            title="New Paragraph"
-          >
-            ¶
           </button>
           <button
             onClick={() => setShowFileUpload(true)}
@@ -412,28 +303,22 @@ export default function WritePageClient() {
           </div>
         </div>
         
-        {/* Content editor */}
-        // For the editor in WritePageClient.tsx
-<div
-  ref={editorRef}
-  className={`prose max-w-none ${
-    theme === 'dark' ? 'prose-invert' : 'prose-gray'
-  } min-h-[50vh] focus:outline-none`}
-  contentEditable
-  suppressContentEditableWarning
-  data-placeholder="Start writing your story..."
-  style={{ 
-    fontSize: '18px', 
-    lineHeight: '1.6',
-    minHeight: '400px'
-  }}
-  onFocus={(e) => {
-    // If empty, create a paragraph
-    if (!e.currentTarget.textContent) {
-      document.execCommand('formatBlock', false, 'p');
-    }
-  }}
-></div>
+        {/* Content editor - Fixed the comment issue */}
+        <div
+          ref={editorRef}
+          className={`prose max-w-none ${
+            theme === 'dark' ? 'prose-invert' : 'prose-gray'
+          } min-h-[50vh] focus:outline-none`}
+          contentEditable
+          suppressContentEditableWarning
+          data-placeholder="Start writing your story..."
+          style={{ 
+            fontSize: '18px', 
+            lineHeight: '1.6',
+            minHeight: '400px'
+          }}
+        ></div>
+        
         {/* Tags */}
         <div className="mt-6">
           <label className="block text-sm font-medium mb-2">

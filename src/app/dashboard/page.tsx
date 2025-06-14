@@ -1,223 +1,188 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { storage } from "@/lib/firebase";
-import { deleteObject, ref } from "firebase/storage";
+import React, { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'react-hot-toast';
+import StoryCard from '@/components/StoryCard';
+import { ref, deleteObject } from 'firebase/storage';
+import { storage } from '@/lib/firebase';
 
 interface Story {
-  id: string;
+  _id: string;
   title: string;
   content: string;
   imageUrl: string;
-  status: "draft" | "published";
+  userId: string;
   createdAt: string;
-  likes?: number;
-  comments?: number;
+  likes: number;
+  comments: number;
+  status: 'draft' | 'published';
 }
 
 export default function DashboardPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const [stories, setStories] = useState<Story[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'draft' | 'published'>('all');
+  const [sortOrder, setSortOrder] = useState<'latest' | 'oldest'>('latest');
   const [loading, setLoading] = useState(true);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
-  const [likeLoading, setLikeLoading] = useState<string | null>(null);
-  const [sortOrder, setSortOrder] = useState<"latest" | "oldest">("latest");
-  const [filterStatus, setFilterStatus] = useState<"all" | "draft" | "published">("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [likingPostId, setLikingPostId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session || !session.user) return;
-
-    const fetchStories = async () => {
+    if (!session?.user) return;
+    const fetchPosts = async () => {
       try {
-        const userId = session.user.id;
-        console.log("Session ID from useSession:", userId);
-
-        const queryParams = new URLSearchParams({
-          userId,
-          sortOrder,
-          limit: "10",
-          skip: "0",
-        });
-
-        if (filterStatus === "published") queryParams.set("publishedOnly", "true");
-        if (filterStatus === "draft") queryParams.set("draftsOnly", "true");
-
-        const res = await fetch(`/api/posts?${queryParams.toString()}`);
-
-        if (!res.ok) {
-          throw new Error(`Failed to fetch: ${res.statusText}`);
-        }
-
+        const res = await fetch(`/api/posts?userId=${session.user.id}`);
         const data = await res.json();
-
-        const mappedStories = data.map((item: any) => ({
-          id: item._id,
-          title: item.title,
-          content: item.content,
-          imageUrl: item.imageUrl,
-          status: item.status,
-          createdAt: item.createdAt,
-          likes: item.likes || 0,
-          comments: item.comments || 0,
-        }));
-
-        setStories(mappedStories);
+        setStories(data);
       } catch (error) {
-        console.error("Error fetching stories:", error);
+        console.error('Error fetching stories:', error);
+        toast.error('Failed to load stories.');
       } finally {
         setLoading(false);
       }
     };
+    fetchPosts();
+  }, [session?.user]);
 
-    fetchStories();
-  }, [session, sortOrder, filterStatus]);
-
-  const handleDelete = async (id: string, imageUrl: string) => {
-    if (!confirm("Are you sure you want to delete this story?")) return;
-  
+  const formatDate = (dateString: string): string => {
     try {
-      setDeleteLoading(id);
-      
-      console.log(`Deleting story with ID: ${id}`);
-      
-      // Handle image deletion if needed
-      if (imageUrl) {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    } catch {
+      return "";
+    }
+  };
+
+  const getExcerpt = (content: string, maxWords: number = 30): string => {
+    if (!content) return "";
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = content;
+    const plainText = tempDiv.textContent || tempDiv.innerText || "";
+    const words = plainText.trim().split(/\s+/);
+    return words.length <= maxWords ? plainText : words.slice(0, maxWords).join(" ") + "…";
+  };
+
+  const cleanAndFormatContent = (htmlContent: string, maxLength = 150): string => {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+    let plainText = tempDiv.textContent || tempDiv.innerText || '';
+    plainText = plainText.replace(/\s+/g, ' ').trim();
+    return plainText.length > maxLength ? plainText.substring(0, maxLength) + '...' : plainText;
+  };
+
+  const handleDelete = async (storyId: string, storyImageUrl: string | undefined): Promise<void> => {
+    if (!confirm('Are you sure you want to delete this story?')) return;
+    try {
+      setDeleteLoading(storyId);
+
+      if (storyImageUrl) {
         try {
-          if (imageUrl.startsWith("/uploads/")) {
-            const imgRes = await fetch("/api/upload/delete", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ filePath: imageUrl }),
+          if (storyImageUrl.startsWith('/uploads/')) {
+            await fetch('/api/upload/delete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ filePath: storyImageUrl }),
             });
-            console.log('Image deletion result:', imgRes.ok ? 'Success' : 'Failed');
-          } else if (imageUrl.includes("firebase") || imageUrl.includes("firebasestorage")) {
-            const imageRef = ref(storage, imageUrl);
+          } else if (storyImageUrl.includes('firebase')) {
+            const imageRef = ref(storage, storyImageUrl);
             await deleteObject(imageRef);
-            console.log('Firebase image deleted');
           }
         } catch (imageError) {
-          console.error("Image delete error:", imageError);
-          // Continue with post deletion
+          console.error('Image delete error:', imageError);
         }
       }
-  
-      // Delete the post
-      const res = await fetch(`/api/posts/${id}`, { 
-        method: "DELETE",
-        credentials: "include"
+
+      const res = await fetch(`/api/posts/${storyId}`, {
+        method: 'DELETE',
+        credentials: 'include',
       });
-      
-      let data;
-      try {
-        data = await res.json();
-      } catch (e) {
-        console.error('Error parsing response:', e);
-        data = {};
-      }
-      
-      console.log('Delete response:', res.status, data);
-      
-      if (!res.ok) {
-        throw new Error(data.error || data.details || "Failed to delete post");
-      }
-  
-      // Update UI on success
-      setStories((prev) => prev.filter((story) => story.id !== id));
-      console.log('Story removed from UI');
-      
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete post');
+
+      setStories((prev) => prev.filter((story) => story._id !== storyId));
+      toast.success('Story deleted successfully!');
     } catch (error) {
-      console.error("Delete error:", error);
-      alert(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+      console.error('Delete error:', error);
+      toast.error(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setDeleteLoading(null);
     }
   };
-  // Like a post
-  const handleLike = async (id: string) => {
+
+  const handleLike = async (postId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!session?.user) {
+      router.push('/login');
+      return;
+    }
+    
+    if (likingPostId) return;
+    setLikingPostId(postId);
+  
     try {
-      setLikeLoading(id);
+      const res = await fetch(`/api/posts/${postId}/like`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+  
+      if (!res.ok) {
+        throw new Error(`Failed to like: ${res.statusText}`);
+      }
+  
+      const data = await res.json();
       
-      // Optimistic UI update
-      setStories(prev => 
-        prev.map(story => 
-          story.id === id 
-            ? { ...story, likes: (story.likes || 0) + 1 } 
-            : story
+      // Update the stories state based on the like action
+      setStories((prev) =>
+        prev.map((story) =>
+          story._id === postId ? { 
+            ...story, 
+            likes: data.liked ? story.likes + 1 : Math.max(story.likes - 1, 0) 
+          } : story
         )
       );
       
-      // For now, just simulate an API call since we haven't implemented it yet
-      // In a real implementation, you'd call your like endpoint here
-      // const res = await fetch(`/api/posts/${id}/like`, { method: "POST" });
-      await new Promise(resolve => setTimeout(resolve, 300)); // Simulate network delay
-      
+      if (data.liked) {
+        toast.success('Story liked!');
+      } else {
+        toast.success('Like removed!');
+      }
     } catch (error) {
-      console.error("Error liking post:", error);
-      // Revert optimistic update on error
-      setStories(prev => 
-        prev.map(story => 
-          story.id === id 
-            ? { ...story, likes: (story.likes || 1) - 1 } 
-            : story
-        )
-      );
+      console.error('Error liking post:', error);
+      toast.error('Failed to update like status.');
     } finally {
-      setLikeLoading(null);
+      setLikingPostId(null);
     }
   };
-  
-  // View comments
   const viewComments = (id: string) => {
-    // For now, just log since we haven't implemented the story page yet
-    console.log("View comments for:", id);
-    
-    // In a real implementation, you'd redirect to the story page
-    // router.push(`/story/${id}#comments`);
+    router.push(`/story/${id}`);
   };
 
   const filteredStories = stories
+    .filter((story) => (filterStatus === 'all' ? true : story.status === filterStatus))
     .filter((story) => {
-      if (filterStatus === "all") return true;
-      return story.status === filterStatus;
-    })
-    .filter((story) =>
-      story.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      story.content.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+      const searchLower = searchQuery.toLowerCase();
+      return (
+        story.title.toLowerCase().includes(searchLower) ||
+        cleanAndFormatContent(story.content).toLowerCase().includes(searchLower)
+      );
+    });
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "";
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    }).format(date);
-  };
-
-  // Get word count for a story
-  const getWordCount = (content: string) => {
-    return content.trim().split(/\s+/).filter(word => word.length > 0).length;
-  };
-  
-  // Get excerpt from content
-  const getExcerpt = (content: string, maxLength: number = 120) => {
-    // Remove markdown formatting
-    const plainText = content
-      .replace(/\*\*(.*?)\*\*/g, "$1")
-      .replace(/_(.*?)_/g, "$1")
-      .replace(/#+\s(.*?)(?:\n|$)/g, "$1 ")
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
-      .replace(/!\[(.*?)\]\(.*?\)/g, "");
-      
-    if (plainText.length <= maxLength) return plainText;
-    
-    return plainText.substring(0, maxLength) + "...";
-  };
+  const sortedStories = [...filteredStories].sort((a, b) => {
+    const dateA = new Date(a.createdAt).getTime();
+    const dateB = new Date(b.createdAt).getTime();
+    return sortOrder === 'latest' ? dateB - dateA : dateA - dateB;
+  });
 
   if (loading) {
     return (
@@ -249,16 +214,16 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-900 py-10 px-6">
       <div className="max-w-5xl mx-auto">
-        {/* Header section */}
+        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-4 md:mb-0">Your Stories</h1>
           <button
-            onClick={() => router.push("/write/new")}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-full transition-colors duration-200 flex items-center"
+            onClick={() => router.push('/write/new')}
+            className="group px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-medium rounded-lg transition-all duration-200 flex items-center shadow-md hover:shadow-lg"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5 mr-1.5"
+              className="h-5 w-5 mr-1.5 group-hover:animate-pulse"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -269,23 +234,17 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* Filter and search bar */}
+        {/* Search, Filter, and Sort */}
         <div className="mb-8 space-y-4 md:space-y-0 md:flex md:items-center md:gap-4">
           <div className="relative flex-grow">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <svg
-                xmlns="http://www.w3.org/2000/svg"
                 className="h-5 w-5 text-gray-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
             <input
@@ -293,272 +252,91 @@ export default function DashboardPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search your stories..."
-              className="pl-10 pr-4 py-3 w-full bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="pl-10 pr-4 py-3 w-full bg-gray-800 border border-indigo-500/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
 
-          {/* Filter buttons */}
           <div className="flex flex-wrap gap-3">
-            <div className="inline-flex rounded-md shadow-sm" role="group">
-              <button
-                onClick={() => setFilterStatus("all")}
-                className={`px-4 py-2 text-sm font-medium rounded-l-lg border ${
-                  filterStatus === "all"
-                    ? "bg-gray-700 text-white border-gray-600"
-                    : "bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700"
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setFilterStatus("published")}
-                className={`px-4 py-2 text-sm font-medium border-y ${
-                  filterStatus === "published"
-                    ? "bg-gray-700 text-white border-gray-600"
-                    : "bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700"
-                }`}
-              >
-                Published
-              </button>
-              <button
-                onClick={() => setFilterStatus("draft")}
-                className={`px-4 py-2 text-sm font-medium rounded-r-lg border ${
-                  filterStatus === "draft"
-                    ? "bg-gray-700 text-white border-gray-600"
-                    : "bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700"
-                }`}
-              >
-                Drafts
-              </button>
+            <div className="inline-flex rounded-lg shadow-sm overflow-hidden border border-indigo-500/30" role="group">
+              {['all', 'published', 'draft'].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setFilterStatus(status as 'all' | 'published' | 'draft')}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                    filterStatus === status
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-gray-800 text-gray-300 hover:bg-indigo-900/50 hover:text-white'
+                  }`}
+                >
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </button>
+              ))}
             </div>
-
             <button
-              onClick={() => setSortOrder(sortOrder === "latest" ? "oldest" : "latest")}
-              className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700"
+              onClick={() => setSortOrder(sortOrder === 'latest' ? 'oldest' : 'latest')}
+              className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg bg-gray-800 text-gray-300 border border-indigo-500/20 hover:bg-gray-700"
             >
               <svg
-                xmlns="http://www.w3.org/2000/svg"
                 className="h-4 w-4 mr-1.5"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
               </svg>
-              {sortOrder === "latest" ? "Newest First" : "Oldest First"}
+              {sortOrder === 'latest' ? 'Newest First' : 'Oldest First'}
             </button>
           </div>
         </div>
 
-        {/* Stories grid */}
-        {filteredStories.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="text-6xl mb-4">📝</div>
-            <h2 className="text-2xl font-semibold text-white mb-2">No stories found</h2>
-            <p className="text-gray-400 mb-8 max-w-md mx-auto">
-              {searchQuery 
-                ? "No stories matching your search. Try different keywords."
-                : filterStatus !== "all" 
-                  ? `You don't have any ${filterStatus} stories yet.` 
-                  : "Start writing your first story and it will appear here."}
-            </p>
-            <button
-              onClick={() => router.push("/write/new")}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-full transition-colors duration-200"
+        {/* Story Grid */}
+        {sortedStories.length === 0 ? (
+          <div className="text-center py-16 bg-gray-800/50 rounded-xl border border-gray-700 p-8">
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className="h-16 w-16 text-gray-600 mx-auto mb-4"
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
             >
-              Start Writing
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+            </svg>
+            
+            <h3 className="text-xl font-semibold text-white mb-2">No stories found</h3>
+            <p className="text-gray-400 mb-6">Start writing your masterpiece!</p>
+            
+            <button
+              onClick={() => router.push('/write/new')}
+              className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 mx-auto"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Create New Story
             </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {filteredStories.map((story) => (
-              <div
-                key={story.id}
-                className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden hover:shadow-lg transition-shadow duration-300"
-              >
-                {story.imageUrl && (
-                  <div className="h-48 overflow-hidden">
-                    <img
-                      src={story.imageUrl}
-                      alt={story.title}
-                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = "/placeholder-image.jpg";
-                      }}
-                    />
-                  </div>
-                )}
-
-                <div className="p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${
-                      story.status === "published"
-                        ? "bg-green-900 text-green-300"
-                        : "bg-yellow-900 text-yellow-300"
-                    }`}>
-                      {story.status === "published" ? "Published" : "Draft"}
-                    </span>
-                    <span className="text-gray-400 text-sm">
-                      {formatDate(story.createdAt)}
-                    </span>
-                  </div>
-
-                  <h2 className="text-xl font-semibold text-white mb-2 line-clamp-1">
-                    {story.title}
-                  </h2>
-                  
-                  <div className="min-h-[72px] mb-3">
-                    <p className="text-gray-400 line-clamp-3">
-                      {getExcerpt(story.content)}
-                    </p>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-                    <div className="flex items-center">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4 mr-1"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
-                        />
-                      </svg>
-                      {getWordCount(story.content)} words
-                    </div>
-                    
-                    {/* Like and comment counts */}
-                    <div className="flex items-center space-x-3">
-                      <div className="flex items-center">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4 mr-1 text-red-500"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                        >
-                          <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-                        </svg>
-                        <span>{story.likes || 0}</span>
-                      </div>
-                      
-                      <div className="flex items-center">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4 mr-1 text-blue-500"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                        >
-                          <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
-                        </svg>
-                        <span>{story.comments || 0}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Story actions */}
-                  <div className="flex flex-wrap gap-2">
-                    {/* Edit button - now smaller */}
-                    <button
-                      onClick={() => router.push(`/write/${story.id}`)}
-                      className="py-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded transition-colors duration-200 flex items-center"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4 mr-1"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                      Edit
-                    </button>
-                    
-                    {/* Like button */}
-                    <button
-                      onClick={() => handleLike(story.id)}
-                      disabled={likeLoading === story.id}
-                      className="py-1.5 px-3 bg-gray-700 hover:bg-red-700 text-sm font-medium rounded transition-colors duration-200 flex items-center disabled:opacity-50"
-                      title="Like this story"
-                    >
-                      {likeLoading === story.id ? (
-                        <svg className="animate-spin h-4 w-4 mr-1 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                      ) : (
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4 mr-1 text-red-500"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                        >
-                          <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                      Like
-                    </button>
-                    
-                    {/* Comment button */}
-                    <button
-                      onClick={() => viewComments(story.id)}
-                      className="py-1.5 px-3 bg-gray-700 hover:bg-blue-700 text-sm font-medium rounded transition-colors duration-200 flex items-center"
-                      title="View comments"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4 mr-1 text-blue-500"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                      >
-                        <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
-                      </svg>
-                      Comments
-                    </button>
-                    
-                    {/* Delete button - smaller and to the right */}
-                    <button
-                      onClick={() => handleDelete(story.id, story.imageUrl)}
-                      disabled={deleteLoading === story.id}
-                      className="ml-auto py-1.5 px-1.5 bg-gray-700 hover:bg-red-600 text-gray-300 hover:text-white rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Delete"
-                    >
-                      {deleteLoading === story.id ? (
-                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                      ) : (
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                          />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
+            {sortedStories.map((story) => (
+              <StoryCard
+                key={story._id}
+                _id={story._id}
+                title={story.title}
+                content={story.content}
+                imageUrl={story.imageUrl}
+                userId={story.userId}
+                createdAt={story.createdAt}
+                likes={story.likes}
+                comments={story.comments}
+                status={story.status}
+                deleteLoading={deleteLoading === story._id}
+                likeLoading={likingPostId === story._id}
+                onDelete={handleDelete}
+                onLike={handleLike}
+                onComment={viewComments}
+                formatDate={formatDate}
+                getExcerpt={getExcerpt}
+              />
             ))}
           </div>
         )}
