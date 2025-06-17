@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     const userToCheckId = pathSegments[3]; // index 3 = [id]
 
     if (!userToCheckId || userToCheckId === currentUserId) {
-      return NextResponse.json({ following: false });
+      return NextResponse.json({ following: false, followers: 0, followingCount: 0 });
     }
 
     const client = await clientPromise;
@@ -51,10 +51,29 @@ export async function GET(req: NextRequest) {
       followingId: userToCheckId,
     });
 
-    return NextResponse.json({ following: !!followRecord });
+    // Get follower count
+    const followerCount = await followCollection.countDocuments({
+      followingId: userToCheckId,
+    });
+
+    // Get following count
+    const followingCount = await followCollection.countDocuments({
+      followerId: userToCheckId,
+    });
+
+    return NextResponse.json({ 
+      following: !!followRecord,
+      followers: followerCount,
+      followingCount: followingCount
+    });
   } catch (error) {
     console.error('Follow check error:', error);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Server error', 
+      following: false, 
+      followers: 0, 
+      followingCount: 0 
+    }, { status: 500 });
   }
 }
 
@@ -101,37 +120,62 @@ export async function POST(req: NextRequest) {
       followingId: userToFollowId,
     });
 
+    let following = false;
+    
     if (alreadyFollowing) {
       await followCollection.deleteOne({
         followerId: currentUserId,
         followingId: userToFollowId,
       });
-      return NextResponse.json({ following: false, message: 'Unfollowed' });
-    }
-
-    await followCollection.insertOne({
-      followerId: currentUserId,
-      followingId: userToFollowId,
-      createdAt: new Date(),
-    });
-
-    if (
-      userToFollow.email &&
-      (!userToFollow.emailPreferences || userToFollow.emailPreferences.newFollower !== false)
-    ) {
-      try {
-        await sendTemplateEmail(userToFollow.email, 'newFollower', [
-          userToFollow.name || 'User',
-          currentUser.name || 'Someone',
-        ]);
-      } catch (e) {
-        console.error('Failed to send follow notification email:', e);
+      following = false;
+    } else {
+      await followCollection.insertOne({
+        followerId: currentUserId,
+        followingId: userToFollowId,
+        createdAt: new Date(),
+      });
+      following = true;
+      
+      // Send email notification
+      if (
+        userToFollow.email &&
+        (!userToFollow.emailPreferences || userToFollow.emailPreferences.newFollower !== false)
+      ) {
+        try {
+          await sendTemplateEmail(userToFollow.email, 'newFollower', [
+            userToFollow.name || 'User',
+            currentUser.name || 'Someone',
+          ]);
+        } catch (e) {
+          console.error('Failed to send follow notification email:', e);
+        }
       }
     }
 
-    return NextResponse.json({ following: true, message: 'Followed' });
+    // Get updated follower count
+    const followerCount = await followCollection.countDocuments({
+      followingId: userToFollowId,
+    });
+
+    // Get updated following count
+    const followingCount = await followCollection.countDocuments({
+      followerId: userToFollowId,
+    });
+
+    return NextResponse.json({
+      following,
+      followers: followerCount,
+      followingCount: followingCount,
+      message: following ? 'Followed' : 'Unfollowed'
+    });
   } catch (error) {
     console.error('Follow error:', error);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Server error', 
+      details: error instanceof Error ? error.message : 'Unknown error',
+      following: false,
+      followers: 0,
+      followingCount: 0
+    }, { status: 500 });
   }
 }

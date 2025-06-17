@@ -203,56 +203,58 @@ export default function UserProfilePage() {
   return (
     <div className="max-w-3xl mx-auto p-6">
       {/* Profile header */}
-      <div className="bg-gray-800 rounded-2xl p-6 mb-8">
-        <div className="flex flex-col md:flex-row md:items-center">
-          <div className="flex items-center mb-4 md:mb-0">
-            <img 
-              src={user.avatar || "/default-avatar.png"} 
-              alt={user.name}
-              className="w-20 h-20 rounded-full object-cover border-2 border-blue-600"
-            />
-            <div className="ml-4">
-              <h1 className="text-2xl font-bold text-white">{user.name}</h1>
-              <div className="flex items-center text-sm text-gray-400 mt-1">
-                <span className="mr-3">{followerCount} Followers</span>
-                <span>{followingCount} Following</span>
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex-grow"></div>
-          
-          <div className="flex items-center">
-            {isCurrentUser ? (
-              <Link
-                href="/profile/edit"
-                className="px-4 py-2 bg-gray-700 rounded-lg text-white hover:bg-gray-600 transition"
-              >
-                Edit Profile
-              </Link>
-            ) : (
-              <button
-                onClick={handleFollowToggle}
-                disabled={followLoading}
-                className={`px-4 py-2 rounded-lg transition ${
-                  isFollowing 
-                    ? "bg-blue-600 hover:bg-blue-700 text-white"
-                    : "bg-gray-700 hover:bg-gray-600 text-white"
-                }`}
-              >
-                {followLoading ? "Loading..." : isFollowing ? "Following" : "Follow"}
-              </button>
-            )}
-          </div>
+<div className="bg-gray-800 rounded-2xl p-6 mb-8">
+  <div className="flex flex-col md:flex-row md:items-center">
+    <div className="flex items-center mb-4 md:mb-0">
+      <img 
+        src={user.avatar || "/logo.png"} 
+        alt={user.name}
+        className="w-20 h-20 rounded-full object-cover border-2 border-blue-600"
+        onError={(e) => {
+          e.currentTarget.src = "/logo.png";
+        }}
+      />
+      <div className="ml-4">
+        <h1 className="text-2xl font-bold text-white">{user.name}</h1>
+        <div className="flex items-center text-sm text-gray-400 mt-1">
+          <span className="mr-3">{followerCount} Follower{followerCount !== 1 ? 's' : ''}</span>
+          <span>{followingCount} Following</span>
         </div>
-        
-        {user.bio && (
-          <div className="mt-4 text-gray-300">
-            {user.bio}
-          </div>
-        )}
       </div>
-      
+    </div>
+    
+    <div className="flex-grow"></div>
+    
+    <div className="flex items-center">
+      {isCurrentUser ? (
+        <Link
+          href="/profile/edit"
+          className="px-4 py-2 bg-gray-700 rounded-lg text-white hover:bg-gray-600 transition"
+        >
+          Edit Profile
+        </Link>
+      ) : (
+        <button
+          onClick={handleFollowToggle}
+          disabled={followLoading}
+          className={`px-4 py-2 rounded-lg transition ${
+            isFollowing 
+              ? "bg-gray-700 hover:bg-gray-600 text-white"
+              : "bg-blue-600 hover:bg-blue-700 text-white" 
+          }`}
+        >
+          {followLoading ? "Loading..." : isFollowing ? "Following" : "Follow"}
+        </button>
+      )}
+    </div>
+  </div>
+  
+  {user.bio && (
+    <div className="mt-4 text-gray-300">
+      {user.bio}
+    </div>
+  )}
+</div>
       {/* User's stories */}
       <h2 className="text-xl font-bold text-white mb-4">
         {isCurrentUser ? "Your Stories" : `${user.name}'s Stories`}

@@ -1,3 +1,4 @@
+// app/api/users/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongoClient';
 import { ObjectId } from 'mongodb';
@@ -32,11 +33,23 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // Get follower count
+    const followerCount = await db.collection('follows').countDocuments({
+      followingId: userId,
+    });
+
+    // Get following count
+    const followingCount = await db.collection('follows').countDocuments({
+      followerId: userId,
+    });
+    
     return NextResponse.json({
       _id: user._id.toString(),
       name: user.name || 'Anonymous User',
       avatar: user.avatar || null,
       bio: user.bio || null,
+      followers: followerCount,
+      following: followingCount,
     });
   } catch (error) {
     console.error('GET /users/[id] error:', error);

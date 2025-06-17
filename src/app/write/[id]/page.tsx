@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { toast } from 'react-hot-toast';
+import ImageCropper from "@/components/ImageCropper";
 
 interface PostData {
   id: string;
@@ -32,6 +33,10 @@ export default function WritePageClient() {
   const [showImageUploader, setShowImageUploader] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  
+  // Add state variables for image cropper
+  const [showImageCropper, setShowImageCropper] = useState(false);
+  const [cropImageUrl, setCropImageUrl] = useState("");
   
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
@@ -748,13 +753,11 @@ export default function WritePageClient() {
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) {
-                    handleImageUpload(file)
-                      .then(() => {
-                        toast.success("Image uploaded successfully");
-                      })
-                      .catch((err) => {
-                        toast.error(err.message || "Failed to upload image");
-                      });
+                    // Create a temporary URL for cropping
+                    const tempUrl = URL.createObjectURL(file);
+                    setCropImageUrl(tempUrl);
+                    setShowImageUploader(false);
+                    setShowImageCropper(true);
                   }
                 }}
                 className={`block w-full text-sm ${
@@ -796,6 +799,25 @@ export default function WritePageClient() {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Image cropper modal */}
+      {showImageCropper && cropImageUrl && (
+        <ImageCropper
+          imageUrl={cropImageUrl}
+          onCropComplete={(croppedImageUrl) => {
+            // Update image in post state
+            handleImageUrlChange(croppedImageUrl);
+            setShowImageCropper(false);
+            // Clean up the temporary URL
+            URL.revokeObjectURL(cropImageUrl);
+          }}
+          onCancel={() => {
+            setShowImageCropper(false);
+            // Clean up the temporary URL
+            URL.revokeObjectURL(cropImageUrl);
+          }}
+        />
       )}
       
       {/* Footer */}
