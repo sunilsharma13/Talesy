@@ -38,7 +38,7 @@ export default function LoginPage() {
   }, []);
 
   const handleSuccessfulLogin = () => {
-    router.push('/dashboard');
+    router.push('/landing');
   };
 
   return (

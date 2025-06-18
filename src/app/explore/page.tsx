@@ -285,7 +285,7 @@ export default function ExplorePage() {
                   Find inspiration, share your thoughts, and connect with others.
                 </p>
                 <Link
-                  href="/feed"
+                  href="/explore"
                   className="inline-block px-6 py-3 bg-white text-indigo-800 font-medium rounded-lg shadow hover:bg-gray-100 transition-colors"
                 >
                   Browse Feed
