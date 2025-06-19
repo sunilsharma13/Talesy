@@ -1,12 +1,18 @@
 // app/api/users/featured/route.ts
 import { NextResponse } from "next/server";
-import clientPromise from "@/lib/mongoClient";
+import { getMongoClient } from "@/lib/dbConnect"; // <--- Change here
 import { ObjectId } from "mongodb";
 
-// Removed unused 'req'
+// Helper function for consistent ObjectId conversion
+function toObjectId(id: string | ObjectId) {
+  if (typeof id === 'string' && ObjectId.isValid(id)) return new ObjectId(id);
+  if (id instanceof ObjectId) return id;
+  throw new Error('Invalid ObjectId');
+}
+
 export async function GET() {
   try {
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db("talesy");
 
     // Get users with most followers
@@ -29,11 +35,16 @@ export async function GET() {
 
         if (!userId) return null;
 
-        const userIdFilter = ObjectId.isValid(userId)
-          ? { _id: new ObjectId(userId) }
-          : { _id: userId };
+        // Ensure userId is converted to ObjectId consistently
+        let userIdObj;
+        try {
+          userIdObj = toObjectId(userId);
+        } catch (e) {
+          console.warn(`Invalid ObjectId for featured user: ${userId}`);
+          return null; // Skip invalid IDs
+        }
 
-        const user = await db.collection("users").findOne(userIdFilter);
+        const user = await db.collection("users").findOne({ _id: userIdObj });
 
         if (!user) return null;
 

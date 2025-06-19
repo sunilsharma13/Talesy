@@ -1,6 +1,6 @@
 // app/api/posts/[id]/comments/[commentId]/replies/route.ts
 import { NextResponse } from 'next/server';
-import clientPromise from '@/lib/mongoClient';
+import { getMongoClient } from '@/lib/dbConnect'; // <--- Change here
 import { ObjectId } from 'mongodb';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
@@ -28,7 +28,7 @@ export async function POST(
 
     const userId = session.user.id;
 
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db('talesy');
 
     // Check if post and comment exist
@@ -80,7 +80,7 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid ID format' }, { status: 400 });
     }
 
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db('talesy');
 
     const replies = await db

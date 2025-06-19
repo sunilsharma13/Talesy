@@ -1,5 +1,6 @@
+// app/api/posts/[id]/like/route.ts
 import { NextResponse } from 'next/server';
-import clientPromise from '@/lib/mongoClient';
+import { getMongoClient } from '@/lib/dbConnect'; // <--- Change here
 import { ObjectId } from 'mongodb';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
@@ -30,7 +31,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const postId = new ObjectId(postIdRaw);
     const userId = session.user.id;
 
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db('talesy');
 
     // Check if the post exists

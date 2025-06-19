@@ -1,21 +1,26 @@
 // app/api/users/search/route.ts
 import { NextResponse } from "next/server";
-import clientPromise from "@/lib/mongoClient";
+import { getMongoClient } from "@/lib/dbConnect"; // <--- Change here
+import { ObjectId } from "mongodb"; // Added ObjectId import for potential future use or consistency
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q") || "";
 
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db("talesy");
 
     const users = await db
       .collection("users")
       .find({
-        name: { $regex: query, $options: "i" },
+        // Search by name or username (case-insensitive)
+        $or: [
+          { name: { $regex: query, $options: "i" } },
+          { username: { $regex: query, $options: "i" } }, // Assuming users have a username field
+        ],
       })
-      .project({ password: 0 }) // never return password
+      .project({ password: 0, email: 0, emailPreferences: 0 }) // never return sensitive info
       .toArray();
 
     return NextResponse.json(users);

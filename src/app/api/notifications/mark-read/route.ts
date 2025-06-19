@@ -1,9 +1,10 @@
 // app/api/notifications/mark-read/route.ts
 import { NextResponse } from "next/server";
-import clientPromise from "@/lib/mongoClient";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { ObjectId } from "mongodb";
+import dbConnect from "@/lib/dbConnect";
+import mongoose from "mongoose";
 
 export async function POST(req: Request) {
   try {
@@ -12,12 +13,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const client = await clientPromise;
-    const db = client.db("talesy");
+    await dbConnect();
+    // Yahan change kiya hai: mongoose.connection.db!
+    const db = mongoose.connection.db!;
     
-    // Mark all notifications as read for the current user
     await db.collection("notifications").updateMany(
-      { recipientId: session.user.id, read: false },
+      { recipientId: new ObjectId(session.user.id as string), read: false },
       { $set: { read: true } }
     );
     

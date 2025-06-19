@@ -1,30 +1,33 @@
-import clientPromise from "@/lib/mongoClient";
+// app/api/writing/route.ts (assuming this path based on the content)
+import { NextResponse } from "next/server"; // Changed to NextResponse for consistency
+import { getMongoClient } from "@/lib/dbConnect"; // <--- Change here
 import { ObjectId } from "mongodb";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth"; // Import from lib/auth.ts
+import { authOptions } from "@/lib/auth";
 
-// ... (rest of the code is the same)
+// Helper function for consistent ObjectId conversion
+function toObjectId(id: string | ObjectId) {
+  if (typeof id === 'string' && ObjectId.isValid(id)) return new ObjectId(id);
+  if (id instanceof ObjectId) return id;
+  throw new Error('Invalid ObjectId');
+}
+
 // GET handler
 export async function GET(req: Request) {
   try {
-    // Get the session with the correct authOptions
     const session = await getServerSession(authOptions);
     console.log("GET handler - Session:", session);
     console.log("Session user object:", session?.user);
     
-    // Check for either id or uid to support both formats
-    const userId = session?.user?.id || session?.user?.id;
+    const userId = session?.user?.id; // Direct access, no need for || session?.user?.uid;
     console.log("User ID to use:", userId);
     
     if (!userId) {
       console.log("⛔️ No user ID found in session");
-      return new Response(JSON.stringify({ message: "Unauthorized" }), { 
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     console.log("Connected to MongoDB!");
     const db = client.db("talesy");
 
@@ -33,16 +36,12 @@ export async function GET(req: Request) {
     const status = url.searchParams.get("status");
 
     if (id) {
-      // Try to convert string ID to ObjectId for MongoDB
       let objectId;
       try {
-        objectId = new ObjectId(id);
+        objectId = toObjectId(id); // Use helper function
       } catch (e) {
-        console.error("Invalid ObjectId format:", id);
-        return new Response(JSON.stringify({ message: "Invalid ID format" }), { 
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        });
+        console.error("Invalid ObjectId format:", id, e);
+        return NextResponse.json({ message: "Invalid ID format" }, { status: 400 });
       }
       
       const doc = await db.collection("writings").findOne({
@@ -52,108 +51,79 @@ export async function GET(req: Request) {
       console.log("Fetched document:", doc);
 
       if (!doc) {
-        return new Response(JSON.stringify({ message: "Writing not found" }), { 
-          status: 404,
-          headers: { 'Content-Type': 'application/json' }
-        });
+        return NextResponse.json({ message: "Writing not found" }, { status: 404 });
       }
 
       // Check if the user has access to this document
-      // Compare both as strings to avoid type issues
-      if (String(doc.userId) !== String(userId)) {
+      // Convert doc.userId to ObjectId if it's a string, then compare
+      const docUserIdObj = toObjectId(doc.userId); // Ensure this is also an ObjectId
+      const sessionUserIdObj = toObjectId(userId);
+
+      if (!docUserIdObj.equals(sessionUserIdObj)) { // Compare ObjectIds using .equals()
         console.log("User doesn't own this document. Doc userId:", doc.userId, "Session userId:", userId);
-        return new Response(JSON.stringify({ message: "Unauthorized" }), { 
-          status: 403,
-          headers: { 'Content-Type': 'application/json' }
-        });
+        return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
       }
 
-      return new Response(JSON.stringify(doc), { 
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json(doc);
     } else if (status) {
       const writings = await db
         .collection("writings")
-        .find({ userId: userId, status })
+        .find({ userId: userId, status }) // userId is already consistent here
         .toArray();
 
       console.log(`Fetched ${writings.length} writings with status ${status}`);
 
-      return new Response(JSON.stringify(writings), { 
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json(writings);
     } else {
       // If no ID or status, return all user's writings
       const writings = await db
         .collection("writings")
-        .find({ userId: userId })
+        .find({ userId: userId }) // userId is already consistent here
         .sort({ createdAt: -1 }) // Sort by newest first
         .toArray();
 
       console.log(`Fetched all ${writings.length} writings for user`);
 
-      return new Response(JSON.stringify(writings), { 
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json(writings);
     }
   } catch (error: any) {
     console.error("Error in GET handler:", error.message, error.stack);
-    return new Response(JSON.stringify({ message: error.message || "Internal Server Error" }), { 
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return NextResponse.json({ message: error.message || "Internal Server Error" }, { status: 500 });
   }
 }
 
 // POST handler - Create new writing
 export async function POST(req: Request) {
   try {
-    // Get the session with the correct authOptions
     const session = await getServerSession(authOptions);
     console.log("POST handler - Session:", session);
     
-    // Check for either id or uid to support both formats
-    const userId = session?.user?.id || session?.user?.id;
-    
-    // Log detailed session info for debugging
+    const userId = session?.user?.id;
     console.log("Session user object:", session?.user);
     console.log("User ID to use:", userId);
     
     if (!userId) {
       console.log("⛔️ No user ID found in session");
-      return new Response(JSON.stringify({ message: "Unauthorized" }), { 
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    // Parse request body
     let body;
     try {
       body = await req.json();
       console.log("Received POST data:", body);
     } catch (e) {
       console.error("Error parsing request JSON:", e);
-      return new Response(JSON.stringify({ message: "Invalid JSON in request body" }), { 
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json({ message: "Invalid JSON in request body" }, { status: 400 });
     }
 
     const { title, content, imageUrl, status } = body;
 
-    if (!title || !content) {
+    if (!title?.trim() || !content?.trim()) { // Added trim and combined check
       console.log("Missing required fields:", { title, content });
-      return new Response(JSON.stringify({ message: "Missing required fields" }), { 
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
     }
 
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     console.log("Connected to MongoDB!");
     const db = client.db("talesy");
 
@@ -163,10 +133,12 @@ export async function POST(req: Request) {
       title,
       content,
       imageUrl: imageUrl || "",
-      userId,  // Using the ID from session
+      userId: toObjectId(userId),  // Store userId as ObjectId
       createdAt: now,
       updatedAt: now,
       status: status || "draft",
+      likes: 0, // Initialize likes and comments count
+      comments: 0,
     };
 
     console.log("Inserting document:", newDoc);
@@ -175,56 +147,37 @@ export async function POST(req: Request) {
     
     console.log("Created post with ID:", result.insertedId);
 
-    // Return the ID in the response for client-side redirect
-    return new Response(
-      JSON.stringify({ 
-        message: "Writing created", 
-        id: result.insertedId 
-      }),
-      { 
-        status: 201,
-        headers: { 'Content-Type': 'application/json' }
-      }
-    );
+    return NextResponse.json({ 
+      message: "Writing created", 
+      id: result.insertedId 
+    }, { status: 201 });
   } catch (error: any) {
     console.error("Error in POST handler:", error.message, error.stack);
-    return new Response(JSON.stringify({ message: error.message || "Error creating writing" }), { 
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return NextResponse.json({ message: error.message || "Error creating writing" }, { status: 500 });
   }
 }
 
 // PUT handler - Update writing and sync to posts if published
 export async function PUT(req: Request) {
   try {
-    // Get the session with the correct authOptions
     const session = await getServerSession(authOptions);
     console.log("PUT handler - Session:", session);
     
-    // Check for either id or uid to support both formats
-    const userId = session?.user?.id || session?.user?.id;
+    const userId = session?.user?.id;
     console.log("User ID to use:", userId);
     
     if (!userId) {
       console.log("⛔️ No user ID found in session");
-      return new Response(JSON.stringify({ message: "Unauthorized" }), { 
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    // Parse request body
     let body;
     try {
       body = await req.json();
       console.log("Received PUT data:", body);
     } catch (e) {
       console.error("Error parsing request JSON:", e);
-      return new Response(JSON.stringify({ message: "Invalid JSON in request body" }), { 
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json({ message: "Invalid JSON in request body" }, { status: 400 });
     }
 
     const { title, content, imageUrl, status } = body;
@@ -234,29 +187,21 @@ export async function PUT(req: Request) {
     console.log("Update ID from query params:", id);
 
     if (!id) {
-      return new Response(JSON.stringify({ message: "Missing id parameter" }), { 
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json({ message: "Missing id parameter" }, { status: 400 });
     }
 
-    // Try to convert string ID to ObjectId for MongoDB
     let objectId;
     try {
-      objectId = new ObjectId(id);
+      objectId = toObjectId(id); // Use helper function
     } catch (e) {
-      console.error("Invalid ObjectId format:", id);
-      return new Response(JSON.stringify({ message: "Invalid ID format" }), { 
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      console.error("Invalid ObjectId format:", id, e);
+      return NextResponse.json({ message: "Invalid ID format" }, { status: 400 });
     }
 
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     console.log("Connected to MongoDB!");
     const db = client.db("talesy");
 
-    // First check if this writing exists
     const writing = await db.collection("writings").findOne({
       _id: objectId
     });
@@ -264,166 +209,140 @@ export async function PUT(req: Request) {
     console.log("Found writing:", writing);
     
     if (!writing) {
-      return new Response(JSON.stringify({ message: "Writing not found" }), { 
-        status: 404, 
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json({ message: "Writing not found" }, { status: 404 });
     }
 
-    // Check if user owns this writing - compare both as strings
-    if (String(writing.userId) !== String(userId)) {
+    const docUserIdObj = toObjectId(writing.userId); // Ensure this is also an ObjectId
+    const sessionUserIdObj = toObjectId(userId);
+
+    if (!docUserIdObj.equals(sessionUserIdObj)) { // Compare ObjectIds using .equals()
       console.log("Writing owner mismatch. Writing userId:", writing.userId, "Session userId:", userId);
-      return new Response(JSON.stringify({ message: "You don't have permission to edit this writing" }), { 
-        status: 403,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json({ message: "You don't have permission to edit this writing" }, { status: 403 });
     }
 
-    // Validate required fields
-    if (!title || !content) {
-      return new Response(JSON.stringify({ message: "Title and content are required" }), { 
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    if (!title?.trim() || !content?.trim()) { // Added trim and combined check
+      return NextResponse.json({ message: "Title and content are required" }, { status: 400 });
     }
 
-    // Update the writing
+    const updateFields: any = { 
+      title, 
+      content, 
+      imageUrl: imageUrl || writing.imageUrl || "", 
+      updatedAt: new Date() 
+    };
+
+    if (status) {
+      updateFields.status = status;
+    }
+
     const result = await db.collection("writings").updateOne(
       { _id: objectId },
-      { 
-        $set: { 
-          title, 
-          content, 
-          imageUrl: imageUrl || writing.imageUrl || "", 
-          status: status || writing.status,
-          updatedAt: new Date() 
-        } 
-      }
+      { $set: updateFields }
     );
 
     console.log("Update result:", result);
 
     if (result.matchedCount === 0) {
-      return new Response(JSON.stringify({ message: "Writing not found" }), { 
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json({ message: "Writing not found or no changes made" }, { status: 404 }); // Changed message slightly
     }
 
-    // ✅ Sync to posts if published
+    // Sync to posts if published
     if (status === "published") {
-      const existingPost = await db.collection("posts").findOne({ writingId: objectId });
+      // Fetch latest data from 'writings' after update to ensure consistency
+      const updatedWriting = await db.collection("writings").findOne({ _id: objectId });
 
-      if (!existingPost) {
-        // Insert new post
-        await db.collection("posts").insertOne({
-          writingId: objectId, // Link back to writing
-          title,
-          content,
-          imageUrl: imageUrl || "",
-          userId,
+      if (updatedWriting) {
+        const existingPost = await db.collection("posts").findOne({ writingId: objectId });
+
+        const postData = {
+          writingId: objectId,
+          title: updatedWriting.title,
+          content: updatedWriting.content,
+          imageUrl: updatedWriting.imageUrl || "",
+          userId: toObjectId(updatedWriting.userId), // Ensure userId in posts is ObjectId
           status: "published",
-          createdAt: new Date(),
+          createdAt: existingPost?.createdAt || new Date(), // Preserve original createdAt if exists
           updatedAt: new Date(),
-        });
-        console.log("Created new published post");
+          likes: updatedWriting.likes || 0, // Include likes and comments counts
+          comments: updatedWriting.comments || 0,
+        };
+
+        if (!existingPost) {
+          await db.collection("posts").insertOne(postData);
+          console.log("Created new published post");
+        } else {
+          await db.collection("posts").updateOne(
+            { writingId: objectId },
+            { $set: postData }
+          );
+          console.log("Updated existing published post");
+        }
       } else {
-        // Update existing post
-        await db.collection("posts").updateOne(
-          { writingId: objectId },
-          { 
-            $set: { 
-              title, 
-              content, 
-              imageUrl: imageUrl || existingPost.imageUrl || "", 
-              status: "published",
-              updatedAt: new Date() 
-            } 
-          }
-        );
-        console.log("Updated existing published post");
+        console.warn("Updated writing not found for post sync. This should not happen.");
       }
+    } else if (status !== "published" && writing.status === "published") {
+      // If status changed from published to something else (draft/deleted), remove from posts
+      await db.collection("posts").deleteOne({ writingId: objectId });
+      console.log("Removed from posts collection due to status change");
     }
 
-    return new Response(JSON.stringify({ 
+    return NextResponse.json({ 
       message: "Writing updated successfully", 
-      id: id }), { 
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+      id: id 
+    }, { status: 200 });
   } catch (error: any) {
     console.error("Error in PUT handler:", error.message, error.stack);
-    return new Response(JSON.stringify({ message: error.message || "Error updating writing" }), { 
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return NextResponse.json({ message: error.message || "Error updating writing" }, { status: 500 });
   }
 }
 
 // DELETE handler - Soft delete writing
 export async function DELETE(req: Request) {
   try {
-    // Get the session with the correct authOptions
     const session = await getServerSession(authOptions);
     console.log("DELETE handler - Session:", session);
     
-    // Check for either id or uid to support both formats
-    const userId = session?.user?.id || session?.user?.id;
+    const userId = session?.user?.id;
     console.log("User ID to use:", userId);
     
     if (!userId) {
       console.log("⛔️ No user ID found in session");
-      return new Response(JSON.stringify({ message: "Unauthorized" }), { 
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
 
     if (!id) {
-      return new Response(JSON.stringify({ message: "Missing id parameter" }), { 
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json({ message: "Missing id parameter" }, { status: 400 });
     }
 
-    // Try to convert string ID to ObjectId for MongoDB
     let objectId;
     try {
-      objectId = new ObjectId(id);
+      objectId = toObjectId(id); // Use helper function
     } catch (e) {
-      console.error("Invalid ObjectId format:", id);
-      return new Response(JSON.stringify({ message: "Invalid ID format" }), { 
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      console.error("Invalid ObjectId format:", id, e);
+      return NextResponse.json({ message: "Invalid ID format" }, { status: 400 });
     }
 
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     console.log("Connected to MongoDB!");
     const db = client.db("talesy");
 
-    // First check if this writing exists
     const writing = await db.collection("writings").findOne({
       _id: objectId
     });
     
     if (!writing) {
-      return new Response(JSON.stringify({ message: "Writing not found" }), { 
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json({ message: "Writing not found" }, { status: 404 });
     }
 
-    // Check if user owns this writing - compare both as strings
-    if (String(writing.userId) !== String(userId)) {
+    const docUserIdObj = toObjectId(writing.userId); // Ensure this is also an ObjectId
+    const sessionUserIdObj = toObjectId(userId);
+
+    if (!docUserIdObj.equals(sessionUserIdObj)) { // Compare ObjectIds using .equals()
       console.log("Writing owner mismatch. Writing userId:", writing.userId, "Session userId:", userId);
-      return new Response(JSON.stringify({ message: "You don't have permission to delete this writing" }), { 
-        status: 403,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return NextResponse.json({ message: "You don't have permission to delete this writing" }, { status: 403 });
     }
 
     const result = await db.collection("writings").updateOne(
@@ -437,18 +356,12 @@ export async function DELETE(req: Request) {
     await db.collection("posts").deleteOne({ writingId: objectId });
     console.log("Removed from posts collection if existed");
 
-    return new Response(JSON.stringify({ 
+    return NextResponse.json({ 
       message: "Writing successfully deleted", 
       id: id
-    }), { 
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    }, { status: 200 });
   } catch (error: any) {
     console.error("Error in DELETE handler:", error.message, error.stack);
-    return new Response(JSON.stringify({ message: error.message || "Error deleting writing" }), { 
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return NextResponse.json({ message: error.message || "Error deleting writing" }, { status: 500 });
   }
 }

@@ -1,33 +1,47 @@
 // app/api/user/settings/route.ts
 import { NextResponse } from 'next/server';
-import clientPromise from '@/lib/mongoClient';
+import { getMongoClient } from '@/lib/dbConnect'; // Keep this import
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
+// import { ObjectId } from 'mongodb'; // <--- REMOVE THIS LINE
+import mongoose from 'mongoose'; // <--- Add this import
+
+// Helper function to safely convert to ObjectId, or return null if invalid (Updated)
+function safeToObjectId(id: string | mongoose.Types.ObjectId | undefined | null): mongoose.Types.ObjectId | null { // <--- Change type
+  if (id === undefined || id === null) {
+    return null;
+  }
+  if (id instanceof mongoose.Types.ObjectId) { // <--- Check against mongoose.Types.ObjectId
+    return id;
+  }
+  if (typeof id === 'string' && mongoose.Types.ObjectId.isValid(id)) { // <--- Use mongoose.Types.ObjectId.isValid
+    return new mongoose.Types.ObjectId(id); // <--- Create mongoose.Types.ObjectId
+  }
+  return null;
+}
 
 // Get user settings
 export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session || !session.user) {
+    if (!session || !session.user || !session.user.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    const userId = session.user.id;
+    // Safely convert session userId to ObjectId
+    const userId = safeToObjectId(session.user.id);
     
-    const client = await clientPromise;
+    if (!userId) {
+        console.error("Session user ID is not a valid ObjectId:", session.user.id);
+        return NextResponse.json({ error: "Invalid user ID format" }, { status: 400 });
+    }
+
+    const client = await getMongoClient(); // Use getMongoClient
     const db = client.db('talesy');
     
-    // Using a type-safe query with userId as string or ObjectId
-    let userQuery: any;
-    if (ObjectId.isValid(userId)) {
-      userQuery = { _id: new ObjectId(userId) };
-    } else {
-      userQuery = { _id: userId };
-    }
-    
-    const user = await db.collection('users').findOne(userQuery);
+    // Query directly with the ObjectId
+    const user = await db.collection('users').findOne({ _id: userId });
     
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -52,30 +66,29 @@ export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session || !session.user) {
+    if (!session || !session.user || !session.user.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    const userId = session.user.id;
+    // Safely convert session userId to ObjectId
+    const userId = safeToObjectId(session.user.id);
     const { emailPreferences } = await req.json();
     
-    if (!emailPreferences) {
+    if (!userId) {
+        console.error("Session user ID is not a valid ObjectId:", session.user.id);
+        return NextResponse.json({ error: "Invalid user ID format" }, { status: 400 });
+    }
+
+    if (!emailPreferences || typeof emailPreferences !== 'object') {
       return NextResponse.json({ error: 'Invalid settings data' }, { status: 400 });
     }
     
-    const client = await clientPromise;
+    const client = await getMongoClient(); // Use getMongoClient
     const db = client.db('talesy');
     
-    // Using a type-safe query with userId as string or ObjectId
-    let userQuery: any;
-    if (ObjectId.isValid(userId)) {
-      userQuery = { _id: new ObjectId(userId) };
-    } else {
-      userQuery = { _id: userId };
-    }
-    
+    // Update directly with the ObjectId
     await db.collection('users').updateOne(
-      userQuery,
+      { _id: userId },
       { $set: { emailPreferences } }
     );
     

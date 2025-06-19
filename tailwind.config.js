@@ -4,6 +4,7 @@ module.exports = {
     "./src/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
+    // Add any other directories where you write your Tailwind CSS classes
   ],
   darkMode: "class", // Use `class="dark"` strategy
   theme: {
@@ -17,13 +18,20 @@ module.exports = {
         geistMono: ['var(--font-geist-mono)', 'monospace'],
       },
       animation: {
-        "fade-in": "fadeIn 0.8s ease-out forwards",
+        // Existing animations:
+        "fade-in": "fadeIn 0.8s ease-out forwards", // Your existing fade-in, which includes translateY
         "pulse-fast": "pulse 6s linear infinite",
         "float": "float 10s ease-in-out infinite",
         "bounce-slow": "bounceSlow 3s ease-in-out infinite",
+
+        // New animations added for LoginPage.tsx effects:
+        "fade-in-up": "fadeIn 1s ease-out forwards", // Using your existing fadeIn keyframe for this effect
+        "text-pop": "textPop 0.8s ease-out forwards",
+        "bounce-once": "bounceOnce 1.5s ease-out 0.8s 1 forwards",
       },
       keyframes: {
-        fadeIn: {
+        // Your existing keyframes:
+        fadeIn: { // Note: This includes a translateY effect
           "0%": { opacity: 0, transform: "translateY(20px)" },
           "100%": { opacity: 1, transform: "translateY(0)" },
         },
@@ -35,6 +43,23 @@ module.exports = {
         bounceSlow: {
           "0%, 100%": { transform: "translateY(0)" },
           "50%": { transform: "translateY(-6px)" },
+        },
+        // Standard Tailwind 'pulse' keyframe is implicitly available, but if 'pulse-fast' needs a custom one:
+        // pulse: { // Only add if you want to override Tailwind's default 'pulse' for 'pulse-fast'
+        //   '0%, 100%': { opacity: 1 },
+        //   '50%': { opacity: .5 },
+        // },
+
+        // New keyframes for LoginPage.tsx effects:
+        textPop: {
+          "0%": { transform: "scale(0.8)", opacity: "0" },
+          "60%": { transform: "scale(1.1)", opacity: "1" },
+          "100%": { transform: "scale(1)" },
+        },
+        bounceOnce: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "20%": { transform: "translateY(-10px)" },
+          "40%": { transform: "translateY(0)" },
         },
       },
     },

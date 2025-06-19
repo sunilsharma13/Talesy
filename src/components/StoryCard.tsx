@@ -1,3 +1,4 @@
+// components/StoryCard.tsx
 "use client";
 
 import Link from "next/link";
@@ -10,19 +11,19 @@ interface StoryCardProps {
   _id: string;
   title: string;
   content: string;
-  imageUrl?: string;
-  userId: string;
+  imageUrl?: string; // Optional image URL
+  userId: string; // The ID of the user who owns the story
   createdAt: string;
   likes?: number;
   comments?: number;
-  status?: "draft" | "published";
-  deleteLoading?: boolean;
-  likeLoading?: boolean;
-  onDelete: (storyId: string, storyImageUrl?: string) => Promise<void>;
-  onLike: (id: string, e: React.MouseEvent) => void;
-  onComment: (id: string) => void;
-  formatDate: (dateString: string) => string;
-  getExcerpt: (content: string, maxWords?: number) => string;
+  status?: "draft" | "published"; // Explicitly passed from HomeClient
+  deleteLoading?: boolean; // Loading state for delete action
+  likeLoading?: boolean; // Loading state for like action
+  onDelete: (storyId: string, storyImageUrl?: string) => Promise<void>; // Delete handler
+  onLike: (id: string, e: React.MouseEvent) => void; // Like handler
+  onComment: (id: string) => void; // Comment handler (navigates to comments)
+  formatDate: (dateString: string) => string; // Helper function for date formatting
+  getExcerpt: (content: string, maxLength?: number) => string; // Helper function for content excerpt
 }
 
 const StoryCard: React.FC<StoryCardProps> = ({
@@ -46,10 +47,13 @@ const StoryCard: React.FC<StoryCardProps> = ({
   const router = useRouter();
   const { data: session } = useSession();
   const [mounted, setMounted] = useState(false);
-  const parsedImageUrl = imageUrl || "/placeholder-image.jpg";
-  
-  // Content excerpt
-  const excerpt = mounted ? getExcerpt(content, 25) : "";
+
+  // Fallback for imageUrl in case it's null/undefined or an empty string
+  const displayImageUrl = imageUrl && imageUrl.trim() !== '' ? imageUrl : "/placeholder-image.jpg";
+
+  // Content excerpt: Ensure it's only generated after mounting if `getExcerpt` relies on DOM,
+  // otherwise, it can be done directly. For now, keeping it consistent with your approach.
+  const excerpt = mounted ? getExcerpt(content, 150) : ""; // Increased excerpt length for better preview
 
   useEffect(() => {
     setMounted(true);
@@ -58,53 +62,55 @@ const StoryCard: React.FC<StoryCardProps> = ({
   const isOwner = session?.user?.id === userId;
 
   return (
-    <div className="bg-gray-800 border border-gray-700/50 rounded-xl overflow-hidden hover:border-indigo-500/30 transition-all duration-300 hover:shadow-xl shadow-lg flex flex-col">
-      {/* Card Header with Image */}
-      <div className="relative">
-        {imageUrl && (
-          <div className="relative w-full h-56 overflow-hidden">
-            <Image
-              src={parsedImageUrl}
-              alt={title}
-              fill
-              style={{ objectFit: "cover" }}
-              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-              className="transition-transform duration-500 hover:scale-105"
-            />
-            
-            {/* Status Badge - Overlay on image */}
-            <div className="absolute top-3 right-3">
-              <span
-                className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                  status === "published"
-                    ? "bg-green-600/90 text-white"
-                    : "bg-amber-500/90 text-white"
-                }`}
-              >
-                {status === "published" ? "Published" : "Draft"}
-              </span>
-            </div>
+    <div className="bg-gray-800 border border-gray-700/50 rounded-xl overflow-hidden hover:border-indigo-500/30 transition-all duration-300 hover:shadow-xl shadow-lg flex flex-col h-full">
+      {/* Card Header with Image and Link */}
+      <Link href={`/story/${_id}`} className="block relative">
+        {/* Use a div for image container for consistent sizing */}
+        <div className="relative w-full h-56 overflow-hidden">
+          <Image
+            src={displayImageUrl}
+            alt={title}
+            fill
+            style={{ objectFit: "cover" }}
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            className="transition-transform duration-500 hover:scale-105"
+            onError={(e) => {
+              // Fallback for image loading error
+              const target = e.target as HTMLImageElement;
+              target.src = "/placeholder-image.jpg"; // Set to a local placeholder if external image fails
+            }}
+          />
+
+          {/* Status Badge - Overlay on image */}
+          <div className="absolute top-3 right-3 z-10">
+            <span
+              className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                status === "published"
+                  ? "bg-green-600/90 text-white"
+                  : "bg-amber-500/90 text-white"
+              }`}
+            >
+              {status === "published" ? "Published" : "Draft"}
+            </span>
           </div>
-        )}
-      </div>
+        </div>
+      </Link>
 
       {/* Card Content */}
       <div className="p-5 flex flex-col flex-grow">
         <div className="flex justify-between items-center mb-2">
           <span className="text-gray-400 text-xs">{formatDate(createdAt)}</span>
-          
-          {/* Like Counter at top right */}
-          <div className="flex items-center">
-            <span className="text-red-400 text-xs flex items-center gap-1">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-              </svg>
-              {likes}
-            </span>
+
+          {/* Like Counter at top right (now separate from like button for clarity) */}
+          <div className="flex items-center text-red-400 text-xs gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+            </svg>
+            {likes}
           </div>
         </div>
 
-        {/* Title with Link */}
+        {/* Title with Link (still clickable, but image also links now) */}
         <Link href={`/story/${_id}`} className="group">
           <h3 className="font-bold text-xl mb-3 text-white group-hover:text-indigo-300 transition-colors line-clamp-2">
             {title}
@@ -113,15 +119,16 @@ const StoryCard: React.FC<StoryCardProps> = ({
 
         {/* Story Excerpt */}
         <p className="text-gray-300 line-clamp-3 text-sm flex-grow mb-4">
-          {excerpt}
+          {excerpt || "No content preview available."} {/* Fallback text if excerpt is empty */}
         </p>
 
         {/* Actions Bar */}
-        <div className="mt-4 pt-3 border-t border-gray-700/50 flex justify-between items-center">
+        <div className="mt-auto pt-3 border-t border-gray-700/50 flex justify-between items-center">
           {/* Comments count */}
           <button
             onClick={() => onComment(_id)}
             className="text-gray-400 hover:text-blue-400 transition flex items-center gap-1 text-sm"
+            title="View comments"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
@@ -166,7 +173,7 @@ const StoryCard: React.FC<StoryCardProps> = ({
             {/* Delete Button - only show if user owns the story */}
             {isOwner && (
               <button
-                onClick={() => onDelete(_id, imageUrl)}
+                onClick={() => onDelete(_id, imageUrl)} // Pass imageUrl to onDelete
                 disabled={deleteLoading}
                 title="Delete"
                 className="flex items-center justify-center p-1.5 rounded-full text-white bg-gray-700 hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"

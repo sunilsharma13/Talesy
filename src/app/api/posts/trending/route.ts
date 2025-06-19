@@ -1,11 +1,11 @@
 // app/api/posts/trending/route.ts
 import { NextResponse } from "next/server";
-import clientPromise from "@/lib/mongoClient";
+import { getMongoClient } from "@/lib/dbConnect"; // <--- Change here
 import { ObjectId } from "mongodb";
 
 export async function GET(req: Request) {
   try {
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db("talesy");
     
     // Find published stories with the most likes and comments
@@ -24,9 +24,10 @@ export async function GET(req: Request) {
         let user = null;
         
         if (userId) {
+          // Ensure userId is a valid ObjectId before querying
           const userIdFilter = ObjectId.isValid(userId) 
             ? { _id: new ObjectId(userId) } 
-            : { _id: userId };
+            : { _id: userId }; // Fallback if userId is already an ObjectId instance (less common with NextAuth IDs)
           
           user = await db.collection("users").findOne(
             userIdFilter,

@@ -1,7 +1,8 @@
 // src/app/api/posts/user/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import clientPromise from '@/lib/mongoClient';
+import dbConnect from '@/lib/dbConnect';
 import { ObjectId } from 'mongodb';
+import mongoose from 'mongoose';
 
 export async function GET(
   request: NextRequest,
@@ -10,15 +11,14 @@ export async function GET(
   try {
     const userId = params.id;
     
-    const client = await clientPromise;
-    const db = client.db("talesy");
+    await dbConnect();
+    // Yahan change kiya hai: mongoose.connection.db!
+    const db = mongoose.connection.db!;
     
-    // Get all writings by this user from the "writings" collection
-    // Note: Using the "writings" collection as that's where your stories are stored
     const posts = await db
       .collection("writings")
       .find({ 
-        userId: userId.toString(),
+        userId: new ObjectId(userId), 
       })
       .sort({ createdAt: -1 })
       .toArray();

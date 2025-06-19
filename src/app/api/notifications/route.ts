@@ -1,9 +1,10 @@
 // app/api/notifications/route.ts
 import { NextResponse } from "next/server";
-import clientPromise from "@/lib/mongoClient";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { ObjectId } from "mongodb";
+// import { ObjectId } from "mongodb"; // <--- REMOVE THIS LINE
+import dbConnect from "@/lib/dbConnect";
+import mongoose from "mongoose"; // <--- Keep this to access mongoose.Types.ObjectId
 
 export async function GET(req: Request) {
   try {
@@ -12,13 +13,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const client = await clientPromise;
-    const db = client.db("talesy");
+    await dbConnect();
+    const db = mongoose.connection.db!;
     
-    // Fetch notifications for the current user
     const notifications = await db
       .collection("notifications")
-      .find({ recipientId: session.user.id })
+      .find({ recipientId: new mongoose.Types.ObjectId(session.user.id as string) }) // <--- CHANGE HERE
       .sort({ createdAt: -1 })
       .limit(20)
       .toArray();
@@ -38,21 +38,20 @@ export async function POST(req: Request) {
     }
     
     const { type, actorId, targetId, message } = await req.json();
-    const recipientId = session.user.id;
+    const recipientId = session.user.id; 
     
     if (!type || !message) {
       return NextResponse.json({ error: "Invalid notification data" }, { status: 400 });
     }
     
-    const client = await clientPromise;
-    const db = client.db("talesy");
+    await dbConnect();
+    const db = mongoose.connection.db!;
     
-    // Create the notification
     const notification = {
-      recipientId,
+      recipientId: new mongoose.Types.ObjectId(recipientId as string), // <--- CHANGE HERE
       type,
-      actorId: actorId || null,
-      targetId: targetId || null,
+      actorId: actorId ? new mongoose.Types.ObjectId(actorId as string) : null, // <--- CHANGE HERE
+      targetId: targetId ? new mongoose.Types.ObjectId(targetId as string) : null, // <--- CHANGE HERE
       message,
       read: false,
       createdAt: new Date()

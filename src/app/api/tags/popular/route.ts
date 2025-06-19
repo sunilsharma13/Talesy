@@ -1,10 +1,10 @@
 // app/api/tags/popular/route.ts
 import { NextResponse } from "next/server";
-import clientPromise from "@/lib/mongoClient";
+import { getMongoClient } from "@/lib/dbConnect"; // <--- Change here
 
 export async function GET(req: Request) {
   try {
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db("talesy");
     
     // For demonstration, we'll return some hard-coded tags

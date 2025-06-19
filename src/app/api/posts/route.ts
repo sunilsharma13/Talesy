@@ -1,127 +1,151 @@
-// src/app/api/posts/route.ts
-import { NextResponse } from "next/server";
-import clientPromise from "@/lib/mongoClient";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import dbConnect from '@/lib/dbConnect'; // Now use your Mongoose dbConnect
+import Post from '@/models/post'; // Adjust path as per your project structure and ensure this model exists
+import { authOptions } from '@/lib/auth'; // Adjust path as per your project structure
 
-// ... (rest of the code is the same)
-
+// GET all posts or a single post by ID (for editing/viewing)
 export async function GET(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    const client = await clientPromise;
-    const db = client.db("talesy");
+    await dbConnect();
+        const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
 
-    const { searchParams } = new URL(req.url);
-    const publishedOnly = searchParams.get("publishedOnly") === "true";
-    const sortOrder = searchParams.get("sortOrder") === "oldest" ? 1 : -1;
-    const limit = parseInt(searchParams.get("limit") || "10");
-    const skip = parseInt(searchParams.get("skip") || "0");
-    const following = searchParams.get("following") === "true";
-
-    // Create base query
-    let query: any = publishedOnly ? { status: "published" } : {};
-    
-    // Filter by userId if provided
-    const userId = searchParams.get("userId");
-    if (userId) {
-      query.userId = userId;
-    }
-    
-    // Handle "following" parameter to show posts from followed users
-    if (following && session?.user?.id) {
-      // Get users that the current user follows
-      const followedUsers = await db.collection("follows")
-        .find({ followerId: session.user.id })
-        .toArray();
-      
-      const followingIds = followedUsers.map(f => f.followingId);
-      
-      if (followingIds.length > 0) {
-        // Add following filter to query
-        query.userId = { $in: followingIds };
-      } else {
-        // If not following anyone, return empty result
-        return NextResponse.json([]);
+    if (id) {
+      // Fetch a single post
+      const post = await Post.findById(id).populate('author', 'name email image'); // Populate author for display
+      if (!post) {
+        return NextResponse.json({ message: 'Post not found' }, { status: 404 });
       }
+      return NextResponse.json(post);
+    } else {
+      // Fetch all posts (consider pagination or filtering for larger apps)
+      const posts = await Post.find({}).sort({ createdAt: -1 }).populate('author', 'name email image');
+      return NextResponse.json(posts);
     }
-
-    console.log("Posts query:", JSON.stringify(query));
-    
-    // Fetch posts with pagination
-    const posts = await db
-      .collection("writings")
-      .find(query)
-      .sort({ createdAt: sortOrder })
-      .skip(skip)
-      .limit(limit)
-      .toArray();
-    
-    // If we need to enhance posts with user data or other stats
-    const enhancedPosts = await Promise.all(posts.map(async (post) => {
-      // Add like count
-      const likeCount = await db.collection("likes")
-        .countDocuments({ postId: post._id.toString() });
-      
-      // Add comment count
-      const commentCount = await db.collection("comments")
-        .countDocuments({ postId: post._id.toString() });
-      
-      return {
-        ...post,
-        likes: likeCount,
-        comments: commentCount
-      };
-    }));
-
-    return NextResponse.json(enhancedPosts);
-  } catch (error) {
-    console.error("❌ GET /api/posts failed:", error);
-    return NextResponse.json({ error: "Failed to fetch posts" }, { status: 500 });
+  } catch (error: any) {
+    console.error("Error in GET /api/posts:", error);
+    return NextResponse.json({ message: "Failed to fetch posts", error: error.message }, { status: 500 });
   }
 }
 
+// POST a new post
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  
-  console.log("Session:", session);
-  console.log("User ID from session:", session?.user?.id);
-  
-  if (!session?.user?.id) {
-    console.log("❌ Unauthorized: No valid user ID in session");
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
+  if (!session || !session.user) {
+    return NextResponse.json({ message: 'Not authenticated' }, { status: 401 });
   }
 
   try {
-    const body = await req.json();
-    const { title, content, imageUrl, status, tags } = body;
+    await dbConnect();
+    const { title, content, imageUrl, status, tags } = await req.json();
 
     if (!title || !content) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json({ message: 'Title and content are required.' }, { status: 400 });
     }
 
-    const newPost = {
-      userId: session.user.id,
+    const newPost = await Post.create({
       title,
-      content,
-      imageUrl: imageUrl || "",
-      status: status || "draft",
-      tags: tags || [],
+      content, // This will now be HTML
+      imageUrl: imageUrl || '',
+      status: status || 'draft',
+      author: session.user.id, // Assuming session.user.id holds the MongoDB ObjectId of the user
+      tags: tags || [], // Save the tags array
       createdAt: new Date(),
       updatedAt: new Date(),
-      likes: 0,         // Initialize with zero likes
-      comments: 0       // Initialize with zero comments
-    };
+    });
 
-    console.log("Creating post with user ID:", session.user.id);
-    
-    const client = await clientPromise;
-    const db = client.db("talesy");
+    return NextResponse.json({ message: 'Post created successfully', _id: newPost._id, ...newPost.toObject() }, { status: 201 });
+  } catch (error: any) {
+    console.error("Error in POST /api/posts:", error);
+    return NextResponse.json({ message: "Failed to create post", error: error.message }, { status: 500 });
+  }
+}
 
-    const result = await db.collection("writings").insertOne(newPost);
-    return NextResponse.json({ success: true, id: result.insertedId });
-  } catch (error) {
-    console.error("❌ POST /api/posts failed:", error);
-    return NextResponse.json({ error: "Failed to create post" }, { status: 500 });
+// PUT (Update) an existing post
+export async function PUT(req: Request) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || !session.user) {
+    return NextResponse.json({ message: 'Not authenticated' }, { status: 401 });
+  }
+
+  try {
+    await dbConnect();
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ message: 'Post ID is required for updating.' }, { status: 400 });
+    }
+
+    const { title, content, imageUrl, status, tags } = await req.json();
+
+    if (!title || !content) {
+      return NextResponse.json({ message: 'Title and content are required.' }, { status: 400 });
+    }
+
+    const postToUpdate = await Post.findById(id);
+
+    if (!postToUpdate) {
+      return NextResponse.json({ message: 'Post not found.' }, { status: 404 });
+    }
+
+    // Authorization check: Ensure the current user is the author of the post
+    if (postToUpdate.author.toString() !== session.user.id) {
+      return NextResponse.json({ message: 'Unauthorized: You are not the author of this post.' }, { status: 403 });
+    }
+
+    postToUpdate.title = title;
+    postToUpdate.content = content; // Update with new HTML content
+    postToUpdate.imageUrl = imageUrl || '';
+    postToUpdate.status = status || 'draft';
+    postToUpdate.tags = tags || []; // Update the tags array
+    postToUpdate.updatedAt = new Date();
+
+    await postToUpdate.save();
+
+    return NextResponse.json({ message: 'Post updated successfully', ...postToUpdate.toObject() }, { status: 200 });
+  } catch (error: any) {
+    console.error("Error in PUT /api/posts:", error);
+    return NextResponse.json({ message: "Failed to update post", error: error.message }, { status: 500 });
+  }
+}
+
+// DELETE a post
+export async function DELETE(req: Request) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || !session.user) {
+    return NextResponse.json({ message: 'Not authenticated' }, { status: 401 });
+  }
+
+  try {
+    await dbConnect();
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ message: 'Post ID is required for deletion.' }, { status: 400 });
+    }
+
+    const postToDelete = await Post.findById(id);
+
+    if (!postToDelete) {
+      return NextResponse.json({ message: 'Post not found.' }, { status: 404 });
+    }
+
+    // Authorization check: Ensure the current user is the author of the post
+    if (postToDelete.author.toString() !== session.user.id) {
+      return NextResponse.json({ message: 'Unauthorized: You are not the author of this post.' }, { status: 403 });
+    }
+
+    await Post.findByIdAndDelete(id);
+
+    return NextResponse.json({ message: 'Post deleted successfully' }, { status: 200 });
+  } catch (error: any) {
+    console.error("Error in DELETE /api/posts:", error);
+    return NextResponse.json({ message: "Failed to delete post", error: error.message }, { status: 500 });
   }
 }

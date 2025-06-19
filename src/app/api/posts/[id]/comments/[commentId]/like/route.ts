@@ -1,6 +1,6 @@
 // app/api/posts/[id]/comments/[commentId]/like/route.ts
 import { NextResponse } from 'next/server';
-import clientPromise from '@/lib/mongoClient';
+import { getMongoClient } from '@/lib/dbConnect'; // <--- Change here
 import { ObjectId } from 'mongodb';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
@@ -23,7 +23,7 @@ export async function POST(
 
     const userId = session.user.id;
 
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db('talesy');
 
     // Check if post and comment exist
@@ -97,7 +97,7 @@ export async function GET(
     const { id: postId, commentId } = params;
     const userId = session.user.id;
 
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db('talesy');
 
     // Check if the user has liked this comment

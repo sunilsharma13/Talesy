@@ -1,7 +1,7 @@
 // app/api/register/route.ts
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import clientPromise from "@/lib/mongoClient";
+import bcrypt from "bcryptjs"; // Make sure bcryptjs is imported
+import { getMongoClient } from "@/lib/dbConnect"; // <--- Change here
 
 export async function POST(req: Request) {
   try {
@@ -11,22 +11,29 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "All fields are required." }, { status: 400 });
     }
 
-    const client = await clientPromise;
+    if (!isValidEmail(email)) {
+        return NextResponse.json({ error: "Invalid email format." }, { status: 400 });
+    }
+
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db("talesy");
     const usersCollection = db.collection("users");
 
-    const existingUser = await usersCollection.findOne({ email });
+    // Convert email to lowercase for consistent storage/lookup
+    const lowercasedEmail = email.toLowerCase(); 
+
+    const existingUser = await usersCollection.findOne({ $or: [{ email: lowercasedEmail }, { username }] });
     if (existingUser) {
-      return NextResponse.json({ error: "User already exists." }, { status: 400 });
+      return NextResponse.json({ error: "User already exists with this email or username." }, { status: 400 });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10); // HASH THE PASSWORD
 
     const result = await usersCollection.insertOne({
       name,
       username,
-      email,
-      password: hashedPassword,
+      email: lowercasedEmail, // Store lowercased email
+      password: hashedPassword, // Store the HASHED password
       createdAt: new Date(),
     });
 
@@ -35,4 +42,9 @@ export async function POST(req: Request) {
     console.error("Registration error:", err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
+}
+
+function isValidEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
 }

@@ -1,5 +1,6 @@
+// app/api/users/[id]/follow/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import clientPromise from '@/lib/mongoClient';
+import { getMongoClient } from '@/lib/dbConnect'; // <--- Change here
 import { ObjectId } from 'mongodb';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
@@ -33,32 +34,36 @@ export async function GET(req: NextRequest) {
 
     const currentUserId = session.user.id;
 
-    // Extract userToCheckId from URL: /api/users/[id]/follow
+    // Extract userToCheckId from URL using params for cleaner access
     const url = new URL(req.url);
     const pathSegments = url.pathname.split('/');
-    const userToCheckId = pathSegments[3]; // index 3 = [id]
+    const userToCheckId = pathSegments[3]; // Assumes URL structure /api/users/[id]/follow
 
     if (!userToCheckId || userToCheckId === currentUserId) {
       return NextResponse.json({ following: false, followers: 0, followingCount: 0 });
     }
 
-    const client = await clientPromise;
+    // Convert IDs to ObjectId if they are strings for consistency in database queries
+    const currentUserIdObj = toObjectId(currentUserId);
+    const userToCheckIdObj = toObjectId(userToCheckId);
+
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db('talesy');
     const followCollection = db.collection('follows');
 
     const followRecord = await followCollection.findOne({
-      followerId: currentUserId,
-      followingId: userToCheckId,
+      followerId: currentUserIdObj, // Use ObjectId
+      followingId: userToCheckIdObj, // Use ObjectId
     });
 
     // Get follower count
     const followerCount = await followCollection.countDocuments({
-      followingId: userToCheckId,
+      followingId: userToCheckIdObj, // Use ObjectId
     });
 
     // Get following count
     const followingCount = await followCollection.countDocuments({
-      followerId: userToCheckId,
+      followerId: userToCheckIdObj, // Use ObjectId (to count how many *this user* is following)
     });
 
     return NextResponse.json({ 
@@ -89,49 +94,45 @@ export async function POST(req: NextRequest) {
     // Extract userToFollowId from URL: /api/users/[id]/follow
     const url = new URL(req.url);
     const pathSegments = url.pathname.split('/');
-    const userToFollowId = pathSegments[3]; // index 3 = [id]
+    const userToFollowId = pathSegments[3]; // Assumes URL structure /api/users/[id]/follow
 
     if (!userToFollowId || userToFollowId === currentUserId) {
       return NextResponse.json({ error: 'Invalid user to follow' }, { status: 400 });
     }
 
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db('talesy');
     const userCollection = db.collection<User>('users');
     const followCollection = db.collection('follows');
 
-    const currentUserFilter = ObjectId.isValid(currentUserId)
-      ? { _id: toObjectId(currentUserId) }
-      : { _id: currentUserId };
+    // Convert IDs to ObjectId for database operations
+    const currentUserIdObj = toObjectId(currentUserId);
+    const userToFollowIdObj = toObjectId(userToFollowId);
 
-    const userToFollowFilter = ObjectId.isValid(userToFollowId)
-      ? { _id: toObjectId(userToFollowId) }
-      : { _id: userToFollowId };
-
-    const currentUser = await userCollection.findOne(currentUserFilter);
-    const userToFollow = await userCollection.findOne(userToFollowFilter);
+    const currentUser = await userCollection.findOne({ _id: currentUserIdObj });
+    const userToFollow = await userCollection.findOne({ _id: userToFollowIdObj });
 
     if (!currentUser || !userToFollow) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     const alreadyFollowing = await followCollection.findOne({
-      followerId: currentUserId,
-      followingId: userToFollowId,
+      followerId: currentUserIdObj,
+      followingId: userToFollowIdObj,
     });
 
     let following = false;
     
     if (alreadyFollowing) {
       await followCollection.deleteOne({
-        followerId: currentUserId,
-        followingId: userToFollowId,
+        followerId: currentUserIdObj,
+        followingId: userToFollowIdObj,
       });
       following = false;
     } else {
       await followCollection.insertOne({
-        followerId: currentUserId,
-        followingId: userToFollowId,
+        followerId: currentUserIdObj,
+        followingId: userToFollowIdObj,
         createdAt: new Date(),
       });
       following = true;
@@ -154,18 +155,18 @@ export async function POST(req: NextRequest) {
 
     // Get updated follower count
     const followerCount = await followCollection.countDocuments({
-      followingId: userToFollowId,
+      followingId: userToFollowIdObj,
     });
 
     // Get updated following count
     const followingCount = await followCollection.countDocuments({
-      followerId: userToFollowId,
+      followerId: currentUserIdObj, // This should be currentUserIdObj, not userToFollowIdObj
     });
 
     return NextResponse.json({
       following,
       followers: followerCount,
-      followingCount: followingCount,
+      followingCount, // Simplified
       message: following ? 'Followed' : 'Unfollowed'
     });
   } catch (error) {

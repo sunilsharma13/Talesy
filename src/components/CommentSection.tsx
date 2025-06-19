@@ -305,8 +305,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({ postId }) => {
         ) : (
           <form onSubmit={handleSubmitComment} className="flex gap-4">
             <div className="w-10 h-10 flex-shrink-0">
-            // In CommentSection.tsx - replace the section with the user image:
-
+          
 <div className="rounded-full overflow-hidden w-10 h-10 bg-gray-700">
   {session.user?.image ? (
     <img

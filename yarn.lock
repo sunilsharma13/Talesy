@@ -496,6 +496,11 @@
     protobufjs "^7.2.5"
     yargs "^17.7.2"
 
+"@heroicons/react@^2.2.0":
+  version "2.2.0"
+  resolved "https://registry.npmjs.org/@heroicons/react/-/react-2.2.0.tgz"
+  integrity sha512-LMcepvRaS9LYHJGsF0zzmgKCUim/X3N/DQKc4jepAXJ7l8QxJ1PmxJzqplF2Z3FE4PqBAIGyJAQ/w4B5dsqbtQ==
+
 "@humanfs/core@^0.19.1":
   version "0.19.1"
   resolved "https://registry.npmjs.org/@humanfs/core/-/core-0.19.1.tgz"
@@ -777,124 +782,136 @@
   dependencies:
     tslib "^2.8.0"
 
-"@tiptap/core@^2.11.5", "@tiptap/core@^2.7.0":
-  version "2.12.0"
-  resolved "https://registry.npmjs.org/@tiptap/core/-/core-2.12.0.tgz"
-  integrity sha512-3qX8oGVKFFZzQ0vit+ZolR6AJIATBzmEmjAA0llFhWk4vf3v64p1YcXcJsOBsr5scizJu5L6RYWEFatFwqckRg==
+"@tiptap/core@^2.14.0", "@tiptap/core@^2.7.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/core/-/core-2.14.0.tgz"
+  integrity sha512-MBSMzGYRFlwYCocvx3dU7zpCBSDQ0qWByNtStaEzuBUgzCJ6wn2DP/xG0cMcLmE3Ia0VLM4nwbLOAAvBXOtylA==
 
-"@tiptap/extension-blockquote@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-blockquote/-/extension-blockquote-2.11.5.tgz"
-  integrity sha512-MZfcRIzKRD8/J1hkt/eYv49060GTL6qGR3NY/oTDuw2wYzbQXXLEbjk8hxAtjwNn7G+pWQv3L+PKFzZDxibLuA==
+"@tiptap/extension-blockquote@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-blockquote/-/extension-blockquote-2.14.0.tgz"
+  integrity sha512-AwqPP0jLYNioKxakiVw0vlfH/ceGFbV+SGoqBbPSGFPRdSbHhxHDNBlTtiThmT3N2PiVwXAD9xislJV+WY4GUA==
 
-"@tiptap/extension-bold@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-bold/-/extension-bold-2.11.5.tgz"
-  integrity sha512-OAq03MHEbl7MtYCUzGuwb0VpOPnM0k5ekMbEaRILFU5ZC7cEAQ36XmPIw1dQayrcuE8GZL35BKub2qtRxyC9iA==
+"@tiptap/extension-bold@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-bold/-/extension-bold-2.14.0.tgz"
+  integrity sha512-8DWwelH55H8KtLECSIv0wh8x/F/6lpagV/pMvT+Azujad0oqK+1iAPKU/kLgjXbFSkisrpV6KSwQts5neCtfRQ==
 
-"@tiptap/extension-bubble-menu@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-bubble-menu/-/extension-bubble-menu-2.11.5.tgz"
-  integrity sha512-rx+rMd7EEdht5EHLWldpkzJ56SWYA9799b33ustePqhXd6linnokJCzBqY13AfZ9+xp3RsR6C0ZHI9GGea0tIA==
+"@tiptap/extension-bubble-menu@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-bubble-menu/-/extension-bubble-menu-2.14.0.tgz"
+  integrity sha512-sN15n0RjPh+2Asvxs7l47hVEvX6c0aPempU8QQWcPUlHoGf1D/XkyHXy6GWVPSxZ5Rj5uAwgKvhHsG/FJ/YGKQ==
   dependencies:
     tippy.js "^6.3.7"
 
-"@tiptap/extension-bullet-list@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-bullet-list/-/extension-bullet-list-2.11.5.tgz"
-  integrity sha512-VXwHlX6A/T6FAspnyjbKDO0TQ+oetXuat6RY1/JxbXphH42nLuBaGWJ6pgy6xMl6XY8/9oPkTNrfJw/8/eeRwA==
+"@tiptap/extension-bullet-list@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-bullet-list/-/extension-bullet-list-2.14.0.tgz"
+  integrity sha512-SWnL4bP8Mm/mWN42AMQNoqYE0V6LgSBTVsHwwAki2wIUQdr9HyoAnohvHy3IME56NMwoyZyo+Mzl45wOqUxziA==
 
-"@tiptap/extension-code-block@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-code-block/-/extension-code-block-2.11.5.tgz"
-  integrity sha512-ksxMMvqLDlC+ftcQLynqZMdlJT1iHYZorXsXw/n+wuRd7YElkRkd6YWUX/Pq/njFY6lDjKiqFLEXBJB8nrzzBA==
+"@tiptap/extension-code-block@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-code-block/-/extension-code-block-2.14.0.tgz"
+  integrity sha512-LRYYZeh8U2XgfTsJ4houB9s9cVRt7PRfVa4MaCeOYKfowVOKQh67yV5oom8Azk9XrMPkPxDmMmdPAEPxeVYFvw==
 
-"@tiptap/extension-code@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-code/-/extension-code-2.11.5.tgz"
-  integrity sha512-xOvHevNIQIcCCVn9tpvXa1wBp0wHN/2umbAZGTVzS+AQtM7BTo0tz8IyzwxkcZJaImONcUVYLOLzt2AgW1LltA==
+"@tiptap/extension-code@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-code/-/extension-code-2.14.0.tgz"
+  integrity sha512-kyo02mnzqgwXayMcyRA/fHQgb+nMmQQpIt1irZwjtEoFZshA7NnY/6b5SJmRcxQ4/X4r2Y2Ha2sWmOcEkLmt4A==
 
-"@tiptap/extension-document@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-document/-/extension-document-2.11.5.tgz"
-  integrity sha512-7I4BRTpIux2a0O2qS3BDmyZ5LGp3pszKbix32CmeVh7lN9dV7W5reDqtJJ9FCZEEF+pZ6e1/DQA362dflwZw2g==
+"@tiptap/extension-document@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-document/-/extension-document-2.14.0.tgz"
+  integrity sha512-qwEgpPIJ3AgXdEtRTr88hODbXRdt14VAwLj27PTSqexB5V7Ra1Jy7iQDhqRwBCoUomVywBsWYxkSuDisSRG+9w==
 
-"@tiptap/extension-dropcursor@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-dropcursor/-/extension-dropcursor-2.11.5.tgz"
-  integrity sha512-uIN7L3FU0904ec7FFFbndO7RQE/yiON4VzAMhNn587LFMyWO8US139HXIL4O8dpZeYwYL3d1FnDTflZl6CwLlg==
+"@tiptap/extension-dropcursor@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-dropcursor/-/extension-dropcursor-2.14.0.tgz"
+  integrity sha512-FIh5cdPuoPKvZ0GqSKhzMZGixm05ac3hSgqhMNCBZmXX459qBUI9CvDl/uzSnY9koBDeLVV3HYMthWQQLSXl9A==
 
-"@tiptap/extension-floating-menu@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-floating-menu/-/extension-floating-menu-2.11.5.tgz"
-  integrity sha512-HsMI0hV5Lwzm530Z5tBeyNCBNG38eJ3qjfdV2OHlfSf3+KOEfn6a5AUdoNaZO02LF79/8+7BaYU2drafag9cxQ==
+"@tiptap/extension-floating-menu@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-floating-menu/-/extension-floating-menu-2.14.0.tgz"
+  integrity sha512-Khx7M7RfZlD1/T/PUlpJmao6FtEBa2L6td2hhaW1USflwGJGk0U/ud4UEqh+aZoJZrkot/EMhEvzmORF3nq+xw==
   dependencies:
     tippy.js "^6.3.7"
 
-"@tiptap/extension-gapcursor@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-gapcursor/-/extension-gapcursor-2.11.5.tgz"
-  integrity sha512-kcWa+Xq9cb6lBdiICvLReuDtz/rLjFKHWpW3jTTF3FiP3wx4H8Rs6bzVtty7uOVTfwupxZRiKICAMEU6iT0xrQ==
+"@tiptap/extension-gapcursor@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-gapcursor/-/extension-gapcursor-2.14.0.tgz"
+  integrity sha512-as+SqC39FRshw4Fm1XVlrdSXveiusf5xiC4nuefLmXsUxO7Yx67x8jS0/VQbxWTLHZ6R1YEW8prLtnxGmVLCAQ==
 
-"@tiptap/extension-hard-break@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-hard-break/-/extension-hard-break-2.11.5.tgz"
-  integrity sha512-q9doeN+Yg9F5QNTG8pZGYfNye3tmntOwch683v0CCVCI4ldKaLZ0jG3NbBTq+mosHYdgOH2rNbIORlRRsQ+iYQ==
+"@tiptap/extension-hard-break@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-hard-break/-/extension-hard-break-2.14.0.tgz"
+  integrity sha512-A8c8n8881iBq3AusNqibh6Hloybr+FgYdg4Lg4jNxbbEaL0WhyLFge1bWlGVpbHXFqdv5YldMUAu6Rop3FhNvw==
 
-"@tiptap/extension-heading@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-heading/-/extension-heading-2.11.5.tgz"
-  integrity sha512-x/MV53psJ9baRcZ4k4WjnCUBMt8zCX7mPlKVT+9C/o+DEs/j/qxPLs95nHeQv70chZpSwCQCt93xMmuF0kPoAg==
+"@tiptap/extension-heading@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-heading/-/extension-heading-2.14.0.tgz"
+  integrity sha512-vM//6G3Ox3mxPv9eilhrDqylELCc8kEP1aQ4xUuOw7vCidjNtGggOa1ERnnpV2dCa2A9E8y4FHtN4Xh29stXQg==
 
-"@tiptap/extension-history@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-history/-/extension-history-2.11.5.tgz"
-  integrity sha512-b+wOS33Dz1azw6F1i9LFTEIJ/gUui0Jwz5ZvmVDpL2ZHBhq1Ui0/spTT+tuZOXq7Y/uCbKL8Liu4WoedIvhboQ==
+"@tiptap/extension-history@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-history/-/extension-history-2.14.0.tgz"
+  integrity sha512-/qnOHQFCEPfkb3caykqd+sqzEC2gx30EQB/mM7+5kIG7CQy7XXaGjFAEaqzE1xJ783Q2E7GVk4JxWM+3NhYSLw==
 
-"@tiptap/extension-horizontal-rule@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-horizontal-rule/-/extension-horizontal-rule-2.11.5.tgz"
-  integrity sha512-3up2r1Du8/5/4ZYzTC0DjTwhgPI3dn8jhOCLu73m5F3OGvK/9whcXoeWoX103hYMnGDxBlfOje71yQuN35FL4A==
+"@tiptap/extension-horizontal-rule@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-horizontal-rule/-/extension-horizontal-rule-2.14.0.tgz"
+  integrity sha512-OrKWgHOhmJtVHjPYaEJetNLiNEvrI85lTrGxzeQa+a8ACb93h4svyHe9J+LHs5pKkXDQFcpYEXJntu0LVLLiDw==
 
-"@tiptap/extension-italic@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-italic/-/extension-italic-2.11.5.tgz"
-  integrity sha512-9VGfb2/LfPhQ6TjzDwuYLRvw0A6VGbaIp3F+5Mql8XVdTBHb2+rhELbyhNGiGVR78CaB/EiKb6dO9xu/tBWSYA==
+"@tiptap/extension-image@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-image/-/extension-image-2.14.0.tgz"
+  integrity sha512-pYCUzZBgsxIvVGTzuW03cPz6PIrAo26xpoxqq4W090uMVoK0SgY5W5y0IqCdw4QyLkJ2/oNSFNc2EP9jVi1CcQ==
 
-"@tiptap/extension-list-item@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-list-item/-/extension-list-item-2.11.5.tgz"
-  integrity sha512-Mp5RD/pbkfW1vdc6xMVxXYcta73FOwLmblQlFNn/l/E5/X1DUSA4iGhgDDH4EWO3swbs03x2f7Zka/Xoj3+WLg==
+"@tiptap/extension-italic@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-italic/-/extension-italic-2.14.0.tgz"
+  integrity sha512-yEw2S+smoVR8DMYQMAWckVW2Sstf7z5+GBZ8zm8NMGhMKb1JFCPZUv5KTTIPnq7ZrKuuZHvjN9+Ef1dRYD8T2A==
 
-"@tiptap/extension-ordered-list@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-ordered-list/-/extension-ordered-list-2.11.5.tgz"
-  integrity sha512-Cu8KwruBNWAaEfshRQR0yOSaUKAeEwxW7UgbvF9cN/zZuKgK5uZosPCPTehIFCcRe+TBpRtZQh+06f/gNYpYYg==
+"@tiptap/extension-link@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-link/-/extension-link-2.14.0.tgz"
+  integrity sha512-fsqW7eRD2xoD6xy7eFrNPAdIuZ3eicA4jKC45Vcft/Xky0DJoIehlVBLxsPbfmv3f27EBrtPkg5+msLXkLyzJA==
+  dependencies:
+    linkifyjs "^4.2.0"
 
-"@tiptap/extension-paragraph@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-paragraph/-/extension-paragraph-2.11.5.tgz"
-  integrity sha512-YFBWeg7xu/sBnsDIF/+nh9Arf7R0h07VZMd0id5Ydd2Qe3c1uIZwXxeINVtH0SZozuPIQFAT8ICe9M0RxmE+TA==
+"@tiptap/extension-list-item@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-list-item/-/extension-list-item-2.14.0.tgz"
+  integrity sha512-t1jXDPEd82sC6vZVE/12/CB52uuiydCIcRfwdh21xNgBMckToKO9S0K6XEp4ROtrKQdlIH2JDVPfpUBvVrYN8Q==
 
-"@tiptap/extension-strike@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-strike/-/extension-strike-2.11.5.tgz"
-  integrity sha512-PVfUiCqrjvsLpbIoVlegSY8RlkR64F1Rr2RYmiybQfGbg+AkSZXDeO0eIrc03//4gua7D9DfIozHmAKv1KN3ow==
+"@tiptap/extension-ordered-list@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-ordered-list/-/extension-ordered-list-2.14.0.tgz"
+  integrity sha512-QUZcyuW9AKvSfpFHcGmbyRCqxcpY0VNf0xipEtogxbA+JDDw3ZSPqU1dUgz9wk00RahPTwNDdY5aVjdQ5N4N9Q==
 
-"@tiptap/extension-text-style@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-text-style/-/extension-text-style-2.11.5.tgz"
-  integrity sha512-YUmYl0gILSd/u/ZkOmNxjNXVw+mu8fpC2f8G4I4tLODm0zCx09j9DDEJXSrM5XX72nxJQqtSQsCpNKnL0hfeEQ==
+"@tiptap/extension-paragraph@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-paragraph/-/extension-paragraph-2.14.0.tgz"
+  integrity sha512-bsQesVpgvDS2e+wr2fp59QO7rWRp2FqcJvBafwXS3Br9U5Mx3eFYryx4wC7cUnhlhUwX5pmaoA7zISgV9dZDgg==
 
-"@tiptap/extension-text@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/extension-text/-/extension-text-2.11.5.tgz"
-  integrity sha512-Gq1WwyhFpCbEDrLPIHt5A8aLSlf8bfz4jm417c8F/JyU0J5dtYdmx0RAxjnLw1i7ZHE7LRyqqAoS0sl7JHDNSQ==
+"@tiptap/extension-strike@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-strike/-/extension-strike-2.14.0.tgz"
+  integrity sha512-rD5d/IL3XPfBOrHRHxt+b+0X1jbIbWONGiad/3sX0ZYQD3PandtCWboH40r/J5tFksebuY12dVYyYQKgLpDBOQ==
 
-"@tiptap/pm@^2.11.5", "@tiptap/pm@^2.7.0":
-  version "2.12.0"
-  resolved "https://registry.npmjs.org/@tiptap/pm/-/pm-2.12.0.tgz"
-  integrity sha512-TNzVwpeNzFfHAcYTOKqX9iU4fRxliyoZrCnERR+RRzeg7gWrXrCLubQt1WEx0sojMAfznshSL3M5HGsYjEbYwA==
+"@tiptap/extension-text-style@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-text-style/-/extension-text-style-2.14.0.tgz"
+  integrity sha512-dl0oi2i0rjLpBqTf4wGy6SLidvPpjxLcmX727pwJlCklkFJVDf8wSFeD4ddxJXiD2Rwef0D/lkcwXSY73CoDcA==
+
+"@tiptap/extension-text@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/extension-text/-/extension-text-2.14.0.tgz"
+  integrity sha512-rHny566nGZHq61zRLwQ9BPG55W/O+eDKwUJl+LhrLiVWwzpvAl9QQYixtoxJKOY48VK41PKwxe3bgDYgNs/Fhg==
+
+"@tiptap/pm@^2.14.0", "@tiptap/pm@^2.7.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/pm/-/pm-2.14.0.tgz"
+  integrity sha512-cnsfaIlvTFCDtLP/A2Fd3LmpttgY0O/tuTM2fC71vetONz83wUTYT+aD9uvxdX0GkSocoh840b0TsEazbBxhpA==
   dependencies:
     prosemirror-changeset "^2.3.0"
     prosemirror-collab "^1.3.1"
@@ -915,43 +932,43 @@
     prosemirror-transform "^1.10.2"
     prosemirror-view "^1.37.0"
 
-"@tiptap/react@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/react/-/react-2.11.5.tgz"
-  integrity sha512-Dp8eHL1G+R/C4+QzAczyb3t1ovexEIZx9ln7SGEM+cT1KHKAw9XGPRgsp92+NQaYI+EdEb/YqoBOSzQcd18/OQ==
+"@tiptap/react@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/react/-/react-2.14.0.tgz"
+  integrity sha512-6mtksbT2+EWXFLdHVFag9PSoh0GXPmL97Cm+4sJoyECUmBkAyoErapAccmZIljyMaVIHBYpYkNdp9Pw1B73ezw==
   dependencies:
-    "@tiptap/extension-bubble-menu" "^2.11.5"
-    "@tiptap/extension-floating-menu" "^2.11.5"
+    "@tiptap/extension-bubble-menu" "^2.14.0"
+    "@tiptap/extension-floating-menu" "^2.14.0"
     "@types/use-sync-external-store" "^0.0.6"
     fast-deep-equal "^3"
     use-sync-external-store "^1"
 
-"@tiptap/starter-kit@^2.11.5":
-  version "2.11.5"
-  resolved "https://registry.npmjs.org/@tiptap/starter-kit/-/starter-kit-2.11.5.tgz"
-  integrity sha512-SLI7Aj2ruU1t//6Mk8f+fqW+18uTqpdfLUJYgwu0CkqBckrkRZYZh6GVLk/02k3H2ki7QkFxiFbZrdbZdng0JA==
+"@tiptap/starter-kit@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.npmjs.org/@tiptap/starter-kit/-/starter-kit-2.14.0.tgz"
+  integrity sha512-Z1bKAfHl14quRI3McmdU+bs675jp6/iexEQTI9M9oHa6l3McFF38g9N3xRpPPX02MX83DghsUPupndUW/yJvEQ==
   dependencies:
-    "@tiptap/core" "^2.11.5"
-    "@tiptap/extension-blockquote" "^2.11.5"
-    "@tiptap/extension-bold" "^2.11.5"
-    "@tiptap/extension-bullet-list" "^2.11.5"
-    "@tiptap/extension-code" "^2.11.5"
-    "@tiptap/extension-code-block" "^2.11.5"
-    "@tiptap/extension-document" "^2.11.5"
-    "@tiptap/extension-dropcursor" "^2.11.5"
-    "@tiptap/extension-gapcursor" "^2.11.5"
-    "@tiptap/extension-hard-break" "^2.11.5"
-    "@tiptap/extension-heading" "^2.11.5"
-    "@tiptap/extension-history" "^2.11.5"
-    "@tiptap/extension-horizontal-rule" "^2.11.5"
-    "@tiptap/extension-italic" "^2.11.5"
-    "@tiptap/extension-list-item" "^2.11.5"
-    "@tiptap/extension-ordered-list" "^2.11.5"
-    "@tiptap/extension-paragraph" "^2.11.5"
-    "@tiptap/extension-strike" "^2.11.5"
-    "@tiptap/extension-text" "^2.11.5"
-    "@tiptap/extension-text-style" "^2.11.5"
-    "@tiptap/pm" "^2.11.5"
+    "@tiptap/core" "^2.14.0"
+    "@tiptap/extension-blockquote" "^2.14.0"
+    "@tiptap/extension-bold" "^2.14.0"
+    "@tiptap/extension-bullet-list" "^2.14.0"
+    "@tiptap/extension-code" "^2.14.0"
+    "@tiptap/extension-code-block" "^2.14.0"
+    "@tiptap/extension-document" "^2.14.0"
+    "@tiptap/extension-dropcursor" "^2.14.0"
+    "@tiptap/extension-gapcursor" "^2.14.0"
+    "@tiptap/extension-hard-break" "^2.14.0"
+    "@tiptap/extension-heading" "^2.14.0"
+    "@tiptap/extension-history" "^2.14.0"
+    "@tiptap/extension-horizontal-rule" "^2.14.0"
+    "@tiptap/extension-italic" "^2.14.0"
+    "@tiptap/extension-list-item" "^2.14.0"
+    "@tiptap/extension-ordered-list" "^2.14.0"
+    "@tiptap/extension-paragraph" "^2.14.0"
+    "@tiptap/extension-strike" "^2.14.0"
+    "@tiptap/extension-text" "^2.14.0"
+    "@tiptap/extension-text-style" "^2.14.0"
+    "@tiptap/pm" "^2.14.0"
 
 "@tsconfig/node10@^1.0.7":
   version "1.0.11"
@@ -1558,7 +1575,7 @@ bson@^5.5.0:
   resolved "https://registry.npmjs.org/bson/-/bson-5.5.1.tgz"
   integrity sha512-ix0EwukN2EpC0SRWIj/7B5+A6uQMQy6KMREI9qQqvgpkV2frH63T0UDVd1SYedL6dNCmDBYB3QtXi4ISk9YT+g==
 
-bson@^6.10.3:
+bson@^6.10.4:
   version "6.10.4"
   resolved "https://registry.npmjs.org/bson/-/bson-6.10.4.tgz"
   integrity sha512-WIsKqkSC0ABoBJuT1LEX+2HEvNmNKKgnTAyd0fL8qzK4SH2i9NXg+t08YtdZp/V9IZ33cxe3iV4yM0qg8lMQng==
@@ -2480,19 +2497,14 @@ fraction.js@^4.3.7:
   resolved "https://registry.npmjs.org/fraction.js/-/fraction.js-4.3.7.tgz"
   integrity sha512-ZsDfxO51wGAXREY55a7la9LScWpwv9RxIrYABrlvOFBlH/ShPnrtsXeuUIfXKKOVicNxQ+o8JTbJvjS4M89yew==
 
-framer-motion@^12.6.3:
-  version "12.6.3"
-  resolved "https://registry.npmjs.org/framer-motion/-/framer-motion-12.6.3.tgz"
-  integrity sha512-2hsqknz23aloK85bzMc9nSR2/JP+fValQ459ZTVElFQ0xgwR2YqNjYSuDZdFBPOwVCt4Q9jgyTt6hg6sVOALzw==
+framer-motion@^11.0.0:
+  version "11.18.2"
+  resolved "https://registry.npmjs.org/framer-motion/-/framer-motion-11.18.2.tgz"
+  integrity sha512-5F5Och7wrvtLVElIpclDT0CBzMVg3dL22B64aZwHtsIY8RB4mXICLrkajK4G9R+ieSAGcgrLeae2SeUTg2pr6w==
   dependencies:
-    motion-dom "^12.6.3"
-    motion-utils "^12.6.3"
+    motion-dom "^11.18.1"
+    motion-utils "^11.18.1"
     tslib "^2.4.0"
-
-fsevents@~2.3.2:
-  version "2.3.3"
-  resolved "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz"
-  integrity sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==
 
 function-bind@^1.1.2:
   version "1.1.2"
@@ -3157,6 +3169,11 @@ linkify-it@^5.0.0:
   dependencies:
     uc.micro "^2.0.0"
 
+linkifyjs@^4.2.0:
+  version "4.3.1"
+  resolved "https://registry.npmjs.org/linkifyjs/-/linkifyjs-4.3.1.tgz"
+  integrity sha512-DRSlB9DKVW04c4SUdGvKK5FR6be45lTU9M76JnngqPeeGDqPwYc0zdUErtsNVMtxPXgUWV4HbXbnC4sNyBxkYg==
+
 locate-path@^6.0.0:
   version "6.0.0"
   resolved "https://registry.npmjs.org/locate-path/-/locate-path-6.0.0.tgz"
@@ -3627,39 +3644,39 @@ mongodb-connection-string-url@^3.0.0:
   optionalDependencies:
     "@mongodb-js/saslprep" "^1.1.0"
 
-mongodb@~6.16.0:
-  version "6.16.0"
-  resolved "https://registry.npmjs.org/mongodb/-/mongodb-6.16.0.tgz"
-  integrity sha512-D1PNcdT0y4Grhou5Zi/qgipZOYeWrhLEpk33n3nm6LGtz61jvO88WlrWCK/bigMjpnOdAUKKQwsGIl0NtWMyYw==
+mongodb@~6.17.0:
+  version "6.17.0"
+  resolved "https://registry.npmjs.org/mongodb/-/mongodb-6.17.0.tgz"
+  integrity sha512-neerUzg/8U26cgruLysKEjJvoNSXhyID3RvzvdcpsIi2COYM3FS3o9nlH7fxFtefTb942dX3W9i37oPfCVj4wA==
   dependencies:
     "@mongodb-js/saslprep" "^1.1.9"
-    bson "^6.10.3"
+    bson "^6.10.4"
     mongodb-connection-string-url "^3.0.0"
 
-mongoose@^8.14.2:
-  version "8.15.1"
-  resolved "https://registry.npmjs.org/mongoose/-/mongoose-8.15.1.tgz"
-  integrity sha512-RhQ4DzmBi5BNGcS0w4u1vdMRIKcteXTCNzDt1j7XRcdWYBz1MjMjulBhPaeC5jBCHOD1yinuOFTTSOWLLGexWw==
+mongoose@^8.16.0:
+  version "8.16.0"
+  resolved "https://registry.npmjs.org/mongoose/-/mongoose-8.16.0.tgz"
+  integrity sha512-gLuAZsbwY0PHjrvfuXvUkUq9tXjyAjN3ioXph5Y6Seu7/Uo8xJaM+rrMbL/x34K4T3UTgtXRyfoq1YU16qKyIw==
   dependencies:
-    bson "^6.10.3"
+    bson "^6.10.4"
     kareem "2.6.3"
-    mongodb "~6.16.0"
+    mongodb "~6.17.0"
     mpath "0.9.0"
     mquery "5.0.0"
     ms "2.1.3"
     sift "17.1.3"
 
-motion-dom@^12.6.3:
-  version "12.6.3"
-  resolved "https://registry.npmjs.org/motion-dom/-/motion-dom-12.6.3.tgz"
-  integrity sha512-gRY08RjcnzgFYLemUZ1lo/e9RkBxR+6d4BRvoeZDSeArG4XQXERSPapKl3LNQRu22Sndjf1h+iavgY0O4NrYqA==
+motion-dom@^11.18.1:
+  version "11.18.1"
+  resolved "https://registry.npmjs.org/motion-dom/-/motion-dom-11.18.1.tgz"
+  integrity sha512-g76KvA001z+atjfxczdRtw/RXOM3OMSdd1f4DL77qCTF/+avrRJiawSG4yDibEQ215sr9kpinSlX2pCTJ9zbhw==
   dependencies:
-    motion-utils "^12.6.3"
+    motion-utils "^11.18.1"
 
-motion-utils@^12.6.3:
-  version "12.6.3"
-  resolved "https://registry.npmjs.org/motion-utils/-/motion-utils-12.6.3.tgz"
-  integrity sha512-R/b3Ia2VxtTNZ4LTEO5pKYau1OUNHOuUfxuP0WFCTDYdHkeTBR9UtxR1cc8mDmKr8PEhmmfnTKGz3rSMjNRoRg==
+motion-utils@^11.18.1:
+  version "11.18.1"
+  resolved "https://registry.npmjs.org/motion-utils/-/motion-utils-11.18.1.tgz"
+  integrity sha512-49Kt+HKjtbJKLtgO/LKj9Ld+6vw9BjH5d9sc40R/kVyH8GLAXgT42M2NnuPcJNuA3s9ZfZBUcwIgpmZWGEE+hA==
 
 mpath@0.9.0:
   version "0.9.0"
@@ -4326,7 +4343,7 @@ queue-microtask@^1.2.2:
   resolved "https://registry.npmjs.org/queue-microtask/-/queue-microtask-1.2.3.tgz"
   integrity sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==
 
-"react-dom@^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom@^17.0.2 || ^18 || ^19", "react-dom@^18.0 || ^19.0 || ^19.0.0-rc", "react-dom@^18.0.0 || ^19.0.0", "react-dom@^18.2.0 || 19.0.0-rc-de68d2f4-20241204 || ^19.0.0", react-dom@>=16, react-dom@>=18.0.0, react-dom@18.3.1:
+"react-dom@^15.0.0 || ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom@^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom@^17.0.2 || ^18 || ^19", "react-dom@^18.0 || ^19.0 || ^19.0.0-rc", "react-dom@^18.0.0 || ^19.0.0", "react-dom@^18.2.0 || 19.0.0-rc-de68d2f4-20241204 || ^19.0.0", react-dom@>=16, react-dom@>=18.0.0, react-dom@18.3.1:
   version "18.3.1"
   resolved "https://registry.npmjs.org/react-dom/-/react-dom-18.3.1.tgz"
   integrity sha512-5m4nQKp+rZRb09LNH59GM4BxTh9251/ylbKIbpe7TpGxfJ+9kv6BLkLBXIjjspbgbnIBNqlI23tRnTWT0snUIw==
@@ -4341,6 +4358,11 @@ react-hot-toast@^2.5.2:
   dependencies:
     csstype "^3.1.3"
     goober "^2.1.16"
+
+react-icons@^5.5.0:
+  version "5.5.0"
+  resolved "https://registry.npmjs.org/react-icons/-/react-icons-5.5.0.tgz"
+  integrity sha512-MEFcXdkP3dLo8uumGI5xN3lDFNsRtrjbOEKDLD7yv76v4wpnEq2Lt2qeHaQOr34I/wPN3s3+N08WkQ+CW37Xiw==
 
 react-image-crop@^11.0.10:
   version "11.0.10"
@@ -4369,6 +4391,11 @@ react-markdown@^10.1.0:
     unist-util-visit "^5.0.0"
     vfile "^6.0.0"
 
+react-parallax-tilt@^1.7.298:
+  version "1.7.298"
+  resolved "https://registry.npmjs.org/react-parallax-tilt/-/react-parallax-tilt-1.7.298.tgz"
+  integrity sha512-onHiUJJDJEOiqU4QP7jYQP1d1+ivFLBrCLRxTfVU/NqAhP0kOgWr9YY5ataYcK0eusltX9GGIpIDh+D9PfCfPA==
+
 react-promise-suspense@0.3.4:
   version "0.3.4"
   resolved "https://registry.npmjs.org/react-promise-suspense/-/react-promise-suspense-0.3.4.tgz"
@@ -4389,7 +4416,7 @@ react-tsparticles@^2.9.3:
     fast-deep-equal "^3.1.3"
     tsparticles-engine "^2.9.3"
 
-"react@^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react@^17.0.0 || ^18.0.0 || ^19.0.0", "react@^17.0.2 || ^18 || ^19", "react@^18.0 || ^19.0 || ^19.0.0-rc", "react@^18.0.0 || ^19.0.0", "react@^18.2.0 || 19.0.0-rc-de68d2f4-20241204 || ^19.0.0", react@^18.3.1, "react@>= 16.8.0 || 17.x.x || ^18.0.0-0 || ^19.0.0-0", react@>=16, react@>=16.13.1, react@>=18, react@>=18.0.0, react@18.3.1:
+react@*, "react@^15.0.0 || ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react@^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react@^17.0.0 || ^18.0.0 || ^19.0.0", "react@^17.0.2 || ^18 || ^19", "react@^18.0 || ^19.0 || ^19.0.0-rc", "react@^18.0.0 || ^19.0.0", "react@^18.2.0 || 19.0.0-rc-de68d2f4-20241204 || ^19.0.0", react@^18.3.1, "react@>= 16 || ^19.0.0-rc", "react@>= 16.8.0 || 17.x.x || ^18.0.0-0 || ^19.0.0-0", react@>=16, react@>=16.13.1, react@>=18, react@>=18.0.0, react@18.3.1:
   version "18.3.1"
   resolved "https://registry.npmjs.org/react/-/react-18.3.1.tgz"
   integrity sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==
@@ -5110,12 +5137,7 @@ tsparticles-basic@^2.12.0:
     tsparticles-updater-out-modes "^2.12.0"
     tsparticles-updater-size "^2.12.0"
 
-tsparticles-engine@^2.11.1, tsparticles-engine@^2.9.3:
-  version "2.11.1"
-  resolved "https://registry.npmjs.org/tsparticles-engine/-/tsparticles-engine-2.11.1.tgz"
-  integrity sha512-tkoCi2SWIVcOkxni6I+ECRz3xfSX2dP/Wn+Kt8Qga/BGWlSrdvLVUn3DbXNJq6h/6efs6n4Db6uFtkceSyRWGg==
-
-tsparticles-engine@^2.12.0:
+tsparticles-engine@^2.11.1, tsparticles-engine@^2.12.0, tsparticles-engine@^2.9.3:
   version "2.12.0"
   resolved "https://registry.npmjs.org/tsparticles-engine/-/tsparticles-engine-2.12.0.tgz"
   integrity sha512-ZjDIYex6jBJ4iMc9+z0uPe7SgBnmb6l+EJm83MPIsOny9lPpetMsnw/8YJ3xdxn8hV+S3myTpTN1CkOVmFv0QQ==

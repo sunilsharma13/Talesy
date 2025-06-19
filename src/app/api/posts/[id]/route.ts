@@ -1,6 +1,6 @@
 // app/api/posts/[id]/route.ts
 import { NextResponse } from 'next/server';
-import clientPromise from '@/lib/mongoClient';
+import { getMongoClient } from '@/lib/dbConnect'; // <--- Change here
 import { ObjectId } from 'mongodb';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
@@ -8,13 +8,14 @@ import { authOptions } from '@/lib/auth';
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
     // Get the post ID from params
-    const postId = params.id;
+    const { id: postId } = await params;
 
+    // Validate if the ID is a valid MongoDB ObjectId
     if (!ObjectId.isValid(postId)) {
       return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
     }
 
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db('talesy');
     const writingsCollection = db.collection('writings');
 
@@ -55,7 +56,7 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
       return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
     }
 
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db('talesy');
     const writingsCollection = db.collection('writings');
 

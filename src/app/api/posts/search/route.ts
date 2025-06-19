@@ -1,6 +1,6 @@
 // app/api/posts/search/route.ts
 import { NextResponse } from "next/server";
-import clientPromise from "@/lib/mongoClient";
+import { getMongoClient } from "@/lib/dbConnect"; // <--- Change here
 import { ObjectId } from "mongodb";
 
 export async function GET(request: Request) {
@@ -8,7 +8,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q") || "";
 
-    const client = await clientPromise;
+    const client = await getMongoClient(); // <--- Change here
     const db = client.db("talesy");
 
     const posts = await db
