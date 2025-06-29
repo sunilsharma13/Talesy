@@ -1,91 +1,87 @@
+// src/app/write/[id]/page.tsx
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { toast } from 'react-hot-toast';
-import dynamic from "next/dynamic"; // Import dynamic for client-side only import
-import ImageCropper from "@/components/ImageCropper"; // Keep your ImageCropper
-import Link from "next/link"; // Ensure Link is imported for back button
+import dynamic from "next/dynamic";
+import ImageCropper from "@/components/ImageCropper";
+import Link from "next/link";
 
-// Dynamically import TiptapEditor as it's a client-side component
+// Dynamically import TiptapEditor
 const TiptapEditor = dynamic(() => import("@/components/TiptapEditor"), {
   ssr: false,
   loading: () => (
-    <div className="min-h-[50vh] flex items-center justify-center text-gray-400">
-      Loading editor...
+    <div className="flex min-h-[400px] items-center justify-center bg-[var(--background-secondary)] rounded-xl shadow-lg animate-pulse">
+      <div className="flex flex-col items-center text-[var(--text-secondary)]">
+        <svg className="animate-spin h-12 w-12 text-[var(--accent-color)]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span className="mt-4 text-xl font-semibold">Loading your creative canvas...</span>
+      </div>
     </div>
   ),
 });
 
 interface PostData {
-  _id?: string; // Optional for new posts
+  _id?: string;
   title: string;
-  content: string; // This will now store HTML from TipTap
+  content: string;
   imageUrl?: string;
   status: "draft" | "published";
-  createdAt?: string; // Optional for new posts
-  updatedAt?: string; // Optional for new posts
-  tags: string[]; // Add tags field
+  createdAt?: string;
+  updatedAt?: string;
+  tags: string[];
 }
 
-export default function WritePageClient() {
+export default function WritePage() {
   const router = useRouter();
   const params = useParams();
-  const id = params?.id as string; // 'new' or existing post ID
-  
-  const { data: session, status } = useSession();
+  const id = params?.id as string;
+
+  const { data: session, status: authStatus } = useSession();
 
   const [post, setPost] = useState<PostData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [imagePreview, setImagePreview] = useState<string>("");
+  const [currentCoverImageUrl, setCurrentCoverImageUrl] = useState<string>("");
   const [wordCount, setWordCount] = useState(0);
-  const [theme, setTheme] = useState<"light" | "dark" | "sepia">("dark");
-  
-  // States for TipTap image upload progress
-  const [isEditorImageUploading, setIsEditorImageUploading] = useState(false);
-  const [editorUploadProgress, setEditorUploadProgress] = useState(0);
 
-  // States for Image Cropper
-  const [showImageCropper, setShowImageCropper] = useState(false);
-  const [cropImageUrl, setCropImageUrl] = useState("");
+  const [globalTheme, setGlobalTheme] = useState<'light' | 'dark'>('dark');
+
+  // State for Cover Image Cropper
+  const [showCoverImageCropper, setShowCoverImageCropper] = useState(false);
+  const [coverCropImageUrl, setCoverCropImageUrl] = useState("");
   const [currentCoverImageFile, setCurrentCoverImageFile] = useState<File | null>(null);
 
-  // State for tags input
+  // State for Content Image Cropper
+  const [showContentImageCropper, setShowContentImageCropper] = useState(false);
+  const [contentCropImageUrl, setContentCropImageUrl] = useState("");
+  const [currentContentImageFile, setCurrentContentImageFile] = useState<File | null>(null);
+  const [tiptapInsertImageCallback, setTiptapInsertImageCallback] = useState<((url: string) => void) | null>(null);
+
   const [currentTagInput, setCurrentTagInput] = useState<string>("");
 
-  const titleRef = useRef<HTMLTextAreaElement>(null);
-  
-  // Background colors based on theme
-  const bgColors = {
-    light: "bg-white",
-    sepia: "bg-amber-50",
-    dark: "bg-gray-900"
-  };
-  
-  const textColors = {
-    light: "text-gray-800",
-    sepia: "text-gray-900",
-    dark: "text-gray-100"
-  };
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const coverFileInputRef = useRef<HTMLInputElement>(null);
+  const contentFileInputRef = useRef<HTMLInputElement>(null); // New ref for content image upload
 
-  // Auto-resize textarea for title
+  // Effect to determine the global theme
   useEffect(() => {
-    const resizeTextarea = (textarea: HTMLTextAreaElement) => {
-      textarea.style.height = "auto";
-      textarea.style.height = textarea.scrollHeight + "px";
+    const updateGlobalTheme = () => {
+      setGlobalTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
     };
-
-    if (titleRef.current) {
-      resizeTextarea(titleRef.current);
-    }
-  }, [post?.title]);
+    updateGlobalTheme();
+    const observer = new MutationObserver(updateGlobalTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
   // Update word count (from HTML content)
-  const calculateWordCount = useCallback((htmlContent: string) => {
-    // A simple way to get text from HTML for word count
+  const parseContentForWordCount = useCallback((htmlContent: string) => {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = htmlContent;
     const textContent = tempDiv.textContent || tempDiv.innerText || '';
@@ -95,19 +91,20 @@ export default function WritePageClient() {
 
   useEffect(() => {
     if (post?.content) {
-      calculateWordCount(post.content);
+      parseContentForWordCount(post.content);
     }
-  }, [post?.content, calculateWordCount]);
+  }, [post?.content, parseContentForWordCount]);
 
   // Check for authentication and fetch post
   useEffect(() => {
-    if (status === "loading") return;
-    
-    if (status === "unauthenticated") {
-      signIn();
-      return; // Redirecting, no need to fetch
+    if (authStatus === "loading") {
+      return;
     }
-    
+    if (authStatus === "unauthenticated") {
+      signIn();
+      return;
+    }
+
     const fetchPost = async () => {
       if (id === "new") {
         setPost({
@@ -118,6 +115,9 @@ export default function WritePageClient() {
           tags: [],
         });
         setLoading(false);
+        setTimeout(() => {
+          titleInputRef.current?.focus();
+        }, 100);
         return;
       }
 
@@ -126,21 +126,16 @@ export default function WritePageClient() {
         const res = await fetch(`/api/writing?id=${id}`, {
           credentials: "include"
         });
-        
+
         if (!res.ok) {
           const errorText = await res.text();
-          let errorMessage = `Failed with status ${res.status}`;
-          try {
-            const errorData = JSON.parse(errorText);
-            errorMessage = errorData.message || errorData.error || errorMessage;
-          } catch (e) {
-            errorMessage = errorText.slice(0, 100) || errorMessage;
-          }
-          throw new Error(errorMessage);
+          toast.error(`Error ${res.status}: ${errorText || "Failed to load post"}`);
+          setError(`Error ${res.status}: ${errorText || "Failed to load post"}`);
+          setPost(null);
+          return;
         }
-
         const data = await res.json();
-        
+
         setPost({
           _id: data._id,
           title: data.title || "",
@@ -149,15 +144,16 @@ export default function WritePageClient() {
           status: data.status || "draft",
           createdAt: data.createdAt || new Date().toISOString(),
           updatedAt: data.updatedAt || new Date().toISOString(),
-          tags: data.tags || [], // Ensure tags are loaded
+          tags: data.tags || [],
         });
-        
         if (data.imageUrl) {
-          setImagePreview(data.imageUrl);
+          setCurrentCoverImageUrl(data.imageUrl);
         }
       } catch (error: any) {
         console.error("Error loading post:", error);
         setError(error.message || "Failed to load post");
+        toast.error(error.message || "Failed to load post");
+        setPost(null);
       } finally {
         setLoading(false);
       }
@@ -165,52 +161,122 @@ export default function WritePageClient() {
 
     if (id) {
       fetchPost();
-    } else {
-      setLoading(false); // Should not happen if ID is derived from params
     }
-  }, [id, status]); // Removed session from dependencies as it's handled by `status`
+  }, [id, authStatus]);
 
-  // Handles cover image selection and opens cropper
-  const handleCoverImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // --- Image Handling Functions (Unified and Reusable) ---
+
+  // UPDATED: Now accepts a File object directly
+  const uploadImageToCloud = useCallback(async (imageFile: File): Promise<string> => {
+    try {
+      const formData = new FormData();
+      formData.append("file", imageFile); // Use the File object directly
+
+      const uploadRes = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        const errorData = await uploadRes.json();
+        throw new Error(errorData.message || "Image upload failed");
+      }
+
+      const uploadData = await uploadRes.json();
+      return uploadData.url; // Assuming the API returns { url: "..." }
+    } catch (error) {
+      console.error("Error uploading image to cloud:", error);
+      toast.error(`Image upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw error;
+    }
+  }, []);
+
+
+  const processImageFileForCropper = useCallback((file: File, isCover: boolean, insertCallback?: (url: string) => void) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error("Please upload an image file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) { // 5MB limit
+      toast.error("Image too large (max 5MB).");
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    if (isCover) {
+      setCurrentCoverImageFile(file);
+      setCoverCropImageUrl(objectUrl);
+      setShowCoverImageCropper(true);
+    } else {
+      setCurrentContentImageFile(file);
+      setContentCropImageUrl(objectUrl);
+      setTiptapInsertImageCallback(() => insertCallback); // Store callback to use after crop & upload
+      setShowContentImageCropper(true);
+    }
+  }, []);
+
+  const handleCoverFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!file.type.startsWith('image/')) {
-        toast.error("Please upload an image file.");
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        toast.error("Cover image too large (max 5MB).");
-        return;
-      }
-      setCurrentCoverImageFile(file);
-      setCropImageUrl(URL.createObjectURL(file));
-      setShowImageCropper(true);
+      processImageFileForCropper(file, true);
+      e.target.value = ''; // Clear input for next upload
     }
   };
 
-  // Callback from ImageCropper when cropping is complete
-  const handleCroppedImageUpload = useCallback(async (croppedImageUrl: string) => {
-    setPost(prev => {
-      if (!prev) return null;
-      return { ...prev, imageUrl: croppedImageUrl };
-    });
-    setImagePreview(croppedImageUrl);
-    setShowImageCropper(false);
-    if (currentCoverImageFile) {
-      URL.revokeObjectURL(URL.createObjectURL(currentCoverImageFile)); // Clean up temp URL
-      setCurrentCoverImageFile(null);
-    }
-    toast.success("Cover image updated!");
-  }, [currentCoverImageFile]);
+  // This is the new callback from TiptapEditor for content images
+  const handleContentImageUploadRequest = useCallback((file: File, insertCallback: (url: string) => void) => {
+    processImageFileForCropper(file, false, insertCallback);
+  }, [processImageFileForCropper]);
 
-  // Callback from ImageCropper when cancelled
-  const handleCropperCancel = useCallback(() => {
-    setShowImageCropper(false);
-    if (currentCoverImageFile) {
-      URL.revokeObjectURL(URL.createObjectURL(currentCoverImageFile)); // Clean up temp URL
-      setCurrentCoverImageFile(null);
+
+  // UPDATED: Now accepts File and Data URL
+  const handleCroppedImageUpload = useCallback(async (file: File, dataUrl: string, isCoverImage: boolean) => {
+    setSaving(true); // Indicate saving while image is uploaded
+    try {
+      const uploadedUrl = await uploadImageToCloud(file); // Use the 'file' object here
+
+      if (isCoverImage) {
+        setPost(prev => ({ ...prev!, imageUrl: uploadedUrl }));
+        setCurrentCoverImageUrl(uploadedUrl);
+        setShowCoverImageCropper(false);
+        toast.success("Cover image updated and uploaded!");
+      } else {
+        // Use the stored Tiptap callback to insert the image into the editor
+        if (tiptapInsertImageCallback) {
+          tiptapInsertImageCallback(uploadedUrl);
+        }
+        setShowContentImageCropper(false);
+        toast.success("Image inserted into story!");
+      }
+    } catch (error) {
+      console.error("Failed to process cropped image:", error);
+      toast.error("Failed to upload cropped image.");
+    } finally {
+      setSaving(false);
+      // Clean up file references and revoke Object URLs created for cropper
+      if (isCoverImage && coverCropImageUrl) URL.revokeObjectURL(coverCropImageUrl);
+      else if (!isCoverImage && contentCropImageUrl) URL.revokeObjectURL(contentCropImageUrl);
+
+      if (isCoverImage) setCurrentCoverImageFile(null);
+      else setCurrentContentImageFile(null);
+      setTiptapInsertImageCallback(null);
     }
-  }, [currentCoverImageFile]);
+  }, [tiptapInsertImageCallback, uploadImageToCloud, coverCropImageUrl, contentCropImageUrl]); // Added image URLs to dependencies for revokeObjectURL
+
+  const handleCropperCancel = useCallback((isCoverImage: boolean) => {
+    if (isCoverImage) {
+      setShowCoverImageCropper(false);
+      if (coverCropImageUrl) URL.revokeObjectURL(coverCropImageUrl); // Revoke the object URL
+      setCurrentCoverImageFile(null);
+    } else {
+      setShowContentImageCropper(false);
+      if (contentCropImageUrl) URL.revokeObjectURL(contentCropImageUrl); // Revoke the object URL
+      setCurrentContentImageFile(null);
+      setTiptapInsertImageCallback(null); // Clear callback
+    }
+  }, [coverCropImageUrl, contentCropImageUrl]); // Dependencies for revoking URLs
+
+  // --- End Image Handling Functions ---
 
 
   async function savePost(postToSave: PostData, targetStatus: "draft" | "published") {
@@ -221,20 +287,6 @@ export default function WritePageClient() {
       setError("Please add a title to your story.");
       toast.error("Please add a title.");
       setSaving(false);
-      titleRef.current?.focus();
-      return;
-    }
-
-    // Minimum word count check on actual text content
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = postToSave.content;
-    const textContent = tempDiv.textContent || tempDiv.innerText || '';
-    const words = textContent.trim().split(/\s+/).filter(word => word.length > 0);
-
-    if (!textContent.trim() || words.length < 5) {
-      setError("Your story seems too short. Please add more content.");
-      toast.error("Your story is too short.");
-      setSaving(false);
       return;
     }
 
@@ -242,10 +294,10 @@ export default function WritePageClient() {
     const isNewPost = !postToSave._id || postToSave._id === "new";
 
     if (isNewPost) {
-      url = "/api/posts"; // Your POST endpoint for new posts
+      url = "/api/writing";
       method = "POST";
     } else {
-      url = `/api/posts?id=${postToSave._id}`; // Your PUT endpoint for existing posts
+      url = `/api/writing?id=${postToSave._id}`;
       method = "PUT";
     }
 
@@ -253,8 +305,8 @@ export default function WritePageClient() {
       title: postToSave.title,
       content: postToSave.content,
       imageUrl: postToSave.imageUrl,
-      status: targetStatus, // Use the targetStatus for saving
-      tags: postToSave.tags, // Include tags in the payload
+      status: targetStatus,
+      tags: postToSave.tags,
     };
 
     try {
@@ -266,35 +318,46 @@ export default function WritePageClient() {
         credentials: "include",
         body: JSON.stringify(body),
       });
-      
+
       let responseData;
       const contentType = res.headers.get("content-type");
       if (contentType && contentType.includes("application/json")) {
         responseData = await res.json();
       } else {
-        responseData = await res.text();
-        try { responseData = JSON.parse(responseData); } catch (e) {}
+        const textResponse = await res.text();
+        try {
+          responseData = JSON.parse(textResponse);
+        } catch (e) {
+          responseData = { message: textResponse || `Failed with status: ${res.status}` };
+        }
       }
-      
+
       if (!res.ok) {
-        const errorMessage = typeof responseData === 'object' && responseData.message
+        const errorMessage = typeof responseData === 'object' && responseData !== null && responseData.message
           ? responseData.message
-          : typeof responseData === 'object' && responseData.error
+          : typeof responseData === 'object' && responseData !== null && responseData.error
             ? responseData.error
             : typeof responseData === 'string'
               ? responseData
-              : `Failed to save post: ${res.status}`;
-              
+              : `Failed to save post with status: ${res.status}.`;
+
         throw new Error(errorMessage);
       }
 
-      if (isNewPost && responseData._id) {
+      if (isNewPost && responseData.id) {
         toast.success(`Story ${targetStatus} successfully!`);
-        router.replace(`/write/${responseData._id}`); // Update URL for new post
+        router.replace(`/write/${responseData.id}`);
       } else {
         toast.success(`Story ${targetStatus} successfully!`);
       }
-      setPost(prev => ({ ...prev!, ...responseData, status: targetStatus })); // Update post state
+      setPost(prev => ({
+        ...prev!,
+        ...responseData,
+        status: targetStatus,
+        title: postToSave.title,
+        updatedAt: new Date().toISOString(),
+      }));
+      setCurrentCoverImageUrl(postToSave.imageUrl || "");
       return responseData;
     } catch (error: any) {
       console.error("Save error:", error);
@@ -306,16 +369,20 @@ export default function WritePageClient() {
   }
 
   const handleTagsKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!post) return; // Add this line to ensure 'post' is not null
+    if (!post) return;
 
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
       const newTag = currentTagInput.trim().toLowerCase();
-      if (newTag && !post.tags.includes(newTag)) { // Removed redundant 'post' check here
-        setPost(prev => ({ ...prev!, tags: [...prev!.tags, newTag] }));
-        setCurrentTagInput("");
+      if (newTag && !post.tags.includes(newTag)) {
+        if (post.tags.length < 5) { // Max 5 tags
+          setPost(prev => ({ ...prev!, tags: [...prev!.tags, newTag] }));
+          setCurrentTagInput("");
+        } else {
+          toast.error("You can add a maximum of 5 tags.");
+        }
       }
-    } else if (e.key === 'Backspace' && currentTagInput === '' && post.tags.length > 0) { // Removed '?' as post is now guaranteed
+    } else if (e.key === 'Backspace' && currentTagInput === '' && post.tags.length > 0) {
       e.preventDefault();
       setPost(prev => ({ ...prev!, tags: prev!.tags.slice(0, -1) }));
     }
@@ -327,26 +394,28 @@ export default function WritePageClient() {
     }
   };
 
-  if (status === "loading" || loading) {
+  // --- Render Loading/Error States ---
+  if (authStatus === "loading" || loading) {
     return (
-      <div className={`min-h-screen ${bgColors[theme]} ${textColors[theme]} flex items-center justify-center`}>
-        <div className="animate-pulse flex flex-col items-center">
-          <div className="h-12 w-12 bg-indigo-500 rounded-full mb-4"></div>
-          <div className="h-4 w-32 bg-gray-300 rounded"></div>
+      <div className={`min-h-screen flex items-center justify-center bg-[var(--background-primary)] text-[var(--text-primary)] transition-colors duration-300`}>
+        <div className="flex flex-col items-center">
+          <div className="animate-pulse h-16 w-16 bg-[var(--accent-color)] rounded-full mb-4"></div>
+          <div className="h-6 w-48 bg-[var(--background-secondary)] rounded-full"></div>
+          <p className="mt-4 text-lg font-medium">Loading your creative canvas...</p>
         </div>
       </div>
     );
   }
-  
-  if (error && !post) { // Show error if no post could be loaded at all
+
+  if (error && !post) {
     return (
-      <div className={`min-h-screen ${bgColors[theme]} ${textColors[theme]} p-6`}>
-        <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-3xl font-bold mb-4">Something went wrong</h1>
-          <p className="text-red-500 mb-6">{error}</p>
-          <button 
+      <div className={`min-h-screen p-6 flex items-center justify-center bg-[var(--background-primary)] text-[var(--text-primary)] transition-colors duration-300`}>
+        <div className={`max-w-md mx-auto text-center p-10 rounded-2xl shadow-2xl bg-[var(--background-secondary)] border-[var(--border-color)] border transition-colors duration-500`}>
+          <h1 className="text-4xl font-extrabold mb-4 text-red-500">Oh No!</h1>
+          <p className="text-lg mb-6 text-[var(--text-secondary)]">{error}</p>
+          <button
             onClick={() => router.push("/dashboard")}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            className="px-6 py-3 bg-[var(--accent-color)] text-white rounded-xl shadow-lg hover:bg-[var(--hover-bg)] transition-all duration-300 transform hover:scale-105"
           >
             Back to Dashboard
           </button>
@@ -355,16 +424,15 @@ export default function WritePageClient() {
     );
   }
 
-  // Fallback if post is still null after loading (shouldn't happen with the current logic)
   if (!post) {
     return (
-      <div className={`min-h-screen ${bgColors[theme]} ${textColors[theme]} p-6`}>
-        <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-3xl font-bold mb-4">Editor Not Ready</h1>
-          <p className="mb-6 text-gray-400">There was an issue preparing the editor. Please try refreshing.</p>
-          <button 
+      <div className={`min-h-screen p-6 flex items-center justify-center bg-[var(--background-primary)] text-[var(--text-primary)] transition-colors duration-300`}>
+        <div className={`max-w-md mx-auto text-center p-10 rounded-2xl shadow-2xl bg-[var(--background-secondary)] border-[var(--border-color)] border transition-colors duration-500`}>
+          <h1 className="text-4xl font-extrabold mb-4 text-[var(--text-primary)]">Editor Not Ready</h1>
+          <p className="text-lg mb-6 text-[var(--text-secondary)]">There was an issue preparing the editor. Please try refreshing.</p>
+          <button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            className="px-6 py-3 bg-[var(--accent-color)] text-white rounded-xl shadow-lg hover:bg-[var(--hover-bg)] transition-all duration-300 transform hover:scale-105"
           >
             Refresh Page
           </button>
@@ -374,227 +442,216 @@ export default function WritePageClient() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col ${bgColors[theme]} ${textColors[theme]} transition-colors duration-300`}>
-      {/* Top Navigation */}
-      <nav className={`border-b ${theme === 'dark' ? 'border-gray-800' : 'border-gray-200'} px-4 py-3 flex items-center justify-between sticky top-0 z-30 ${bgColors[theme]}`}>
-        <div className="flex items-center space-x-4">
+    <div className={`min-h-screen flex flex-col bg-[var(--background-primary)] text-[var(--text-primary)] transition-colors duration-300 font-sans`}>
+      {/* Top Navigation - Adjusted for better responsiveness */}
+      <nav className={`px-4 md:px-8 py-4 flex flex-wrap items-center justify-between sticky top-0 z-30 bg-[var(--background-secondary)] shadow-sm border-b border-[var(--border-color)] transition-colors duration-300`}>
+        {/* Left section: Back button & Word Count */}
+        <div className="flex items-center space-x-2 md:space-x-4 mb-2 sm:mb-0 w-full sm:w-auto justify-between sm:justify-start">
           <Link
             href="/dashboard"
-            className={`${theme === 'dark' ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500 hover:text-gray-700'} transition-colors`}
+            className={`p-2 rounded-full transition-colors duration-200 bg-[var(--background-tertiary)] hover:bg-[var(--hover-bg)] text-[var(--text-secondary)] flex items-center justify-center group`}
             title="Back to Dashboard"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 group-hover:scale-110 transition-transform" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clipRule="evenodd" />
             </svg>
           </Link>
-          <div className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-            {wordCount > 0 ? `${wordCount} words` : "New Story"}
+          <div className={`text-sm md:text-base font-medium text-[var(--text-primary)] opacity-80`}>
+            {wordCount > 0 ? `${wordCount} words` : "Start your story"}
           </div>
         </div>
-        
-        <div className="flex items-center space-x-3">
-          <div className="flex space-x-2">
+
+        {/* Right section: Save/Publish buttons */}
+        <div className="flex items-center space-x-2 md:space-x-4 w-full sm:w-auto justify-end">
+          <div className="flex flex-1 sm:flex-none space-x-2 md:space-x-3 justify-end"> {/* Use flex-1 on smaller screens to take available width */}
             <button
               onClick={() => savePost(post, "draft")}
               disabled={saving}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                theme === 'dark'
-                  ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                  : 'bg-gray-200 hover:bg-gray-300 text-gray-800'
-              } ${saving ? "opacity-70 cursor-not-allowed" : ""}`}
+              className={`flex-1 sm:flex-auto px-3 py-2 md:px-6 md:py-2.5 rounded-full text-sm md:text-md font-semibold text-center transition-all duration-300 shadow-md
+                bg-[var(--background-tertiary)] hover:bg-[var(--hover-bg)] text-[var(--text-secondary)]
+                ${saving ? "opacity-70 cursor-not-allowed" : "hover:scale-105"}`}
             >
-              {saving && post.status === "draft" ? "Saving..." : "Save draft"}
+              {saving && post.status === "draft" ? "Saving..." : "Save Draft"}
             </button>
-            
+
             <button
               onClick={() => savePost(post, "published")}
               disabled={saving}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                theme === 'dark'
-                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              } ${saving ? "opacity-70 cursor-not-allowed" : ""}`}
+              className={`flex-1 sm:flex-auto px-3 py-2 md:px-6 md:py-2.5 rounded-full text-sm md:text-md font-semibold text-center transition-all duration-300 shadow-lg
+                bg-[var(--accent-color)] text-white hover:bg-[var(--hover-bg)]
+                ${saving ? "opacity-70 cursor-not-allowed" : "hover:scale-105"}`}
             >
-              {saving && post.status === "published" ? "Publishing..." : "Publish"}
+              {saving && post.status === "published" ? "Publishing..." : "Publish Story"}
             </button>
           </div>
-          
-          {/* Theme switcher */}
-          <button
-            onClick={() => setTheme(theme === 'light' ? 'sepia' : theme === 'sepia' ? 'dark' : 'light')}
-            className={`p-1.5 rounded-full ${theme === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}
-            title="Change theme"
-          >
-            {theme === 'light' && (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-              </svg>
-            )}
-            {theme === 'sepia' && (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-              </svg>
-            )}
-            {theme === 'dark' && (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-              </svg>
-            )}
-          </button>
         </div>
       </nav>
-      
+
       {/* Error message */}
       {error && (
-        <div className={`${theme === 'dark' ? 'bg-red-900/30 text-red-200' : 'bg-red-50 text-red-700'} p-3 text-sm`}>
-          {error}
+        <div className={`bg-red-500/20 text-red-200 p-3 text-sm flex items-center justify-center font-semibold`}>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+          </svg>
+          <span>{error}</span>
         </div>
       )}
-      
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col w-full p-4 max-w-4xl mx-auto">
-        {/* Cover image section */}
-        <div className={`mb-6 p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'} border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'}`}>
-          <label className={`block text-lg font-semibold mb-2 ${textColors[theme]}`}>
-            Cover Image
-          </label>
-          {imagePreview ? (
-            <div className="relative w-full h-64 mb-4 rounded-lg overflow-hidden group">
-              <img 
-                src={imagePreview} 
-                alt="Cover Preview" 
-                className="w-full h-full object-cover"
+
+      {/* Main unified writing area - The true "canvas" */}
+      {/* Adjusted padding for smaller screens */}
+      <main className="flex-1 flex justify-center py-6 sm:py-8 px-2 sm:px-4"> {/* Adjusted px for small screens */}
+        <section className={`relative w-full max-w-4xl lg:max-w-5xl xl:max-w-6xl
+            p-4 sm:p-6 md:p-8 rounded-lg sm:rounded-xl shadow-lg
+            bg-[var(--background-secondary)] border border-[var(--border-color)] transition-all duration-300
+            hover:border-[var(--accent-color)] hover:shadow-2xl focus-within:border-[var(--accent-color)] focus-within:shadow-2xl
+            transform hover:scale-[1.005] transition-transform duration-300 ease-out
+          `}>
+
+          {/* Cover Image Button & Info - Integrated and subtle */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                ref={coverFileInputRef}
+                onChange={handleCoverFileInputChange}
+                id="coverImageUpload"
               />
-              <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => {
-                    setImagePreview("");
-                    setPost(prev => ({ ...prev!, imageUrl: "" }));
-                    toast.success("Cover image removed.");
-                  }}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors mr-2"
-                >
-                  Remove
-                </button>
-                <label className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors cursor-pointer">
-                  Change
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleCoverImageChange}
-                  />
-                </label>
-              </div>
-            </div>
-          ) : (
-            <div className={`w-full h-48 flex items-center justify-center border-2 border-dashed ${theme === 'dark' ? 'border-gray-600 text-gray-500' : 'border-gray-400 text-gray-600'} rounded-lg cursor-pointer hover:bg-opacity-80 transition-colors`}>
-              <label className="text-center cursor-pointer">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleCoverImageChange}
-                />
-                <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <button
+                onClick={() => coverFileInputRef.current?.click()}
+                className={`flex-shrink-0 inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold transition-colors duration-200 shadow-md bg-[var(--accent-color)] text-white hover:bg-[var(--hover-bg)] whitespace-nowrap`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                <p className="text-sm">Click to upload a cover image (max 5MB)</p>
-                <p className="text-xs mt-1 text-gray-400">Recommended aspect ratio 16:9</p>
-              </label>
+                {currentCoverImageUrl ? "Change Cover" : "Add Cover Photo"}
+              </button>
+              {currentCoverImageUrl && (
+                  <button
+                      onClick={() => {
+                          setCurrentCoverImageUrl("");
+                          setPost(prev => ({ ...prev!, imageUrl: "" }));
+                          toast.success("Cover image removed.");
+                      }}
+                      className={`flex-shrink-0 inline-flex items-center px-3 py-2 rounded-full text-sm font-semibold transition-colors duration-200 shadow-md bg-[var(--background-tertiary)] hover:bg-[var(--hover-bg)] text-[var(--text-secondary)] whitespace-nowrap`}
+                  >
+                      Remove
+                  </button>
+              )}
             </div>
-          )}
-        </div>
+            <p className={`text-xs sm:text-sm text-[var(--text-secondary)] opacity-60 text-right w-full sm:w-auto`}>
+              {currentCoverImageUrl ? "Cover image is set." : "No cover image."} (Recommended: 16:9 ratio, max 5MB)
+            </p>
+          </div>
 
-        {/* Title input */}
-        <div className="mb-4">
-          <textarea
-            ref={titleRef}
-            placeholder="Title of your story..."
-            className={`w-full text-4xl font-bold resize-none overflow-hidden bg-transparent focus:outline-none ${theme === 'dark' ? 'placeholder-gray-600 text-white' : 'placeholder-gray-400 text-gray-900'}`}
+          {/* Title Input */}
+          <input
+            ref={titleInputRef}
+            type="text"
+            id="storyTitle"
             value={post.title}
-            onChange={(e) => {
-              setPost({ ...post, title: e.target.value });
-              if (titleRef.current) {
-                titleRef.current.style.height = "auto";
-                titleRef.current.style.height = titleRef.current.scrollHeight + "px";
-              }
-            }}
-            rows={1}
-            style={{ minHeight: '50px' }}
+            onChange={(e) => setPost(prev => ({ ...prev!, title: e.target.value }))}
+            placeholder="Title"
+            className={`w-full text-3xl md:text-4xl lg:text-5xl font-extrabold pb-3 mb-6 md:mb-8
+            border-b-2 border-transparent focus:border-[var(--accent-color)]
+            text-[var(--text-primary)] placeholder-[var(--text-secondary)]
+            bg-transparent outline-none transition-colors duration-200`}
+            style={{ fontFamily: 'Georgia, serif' }}
           />
-        </div>
-        
-        {/* TipTap Editor for Content */}
-        <div className="mb-6 flex-1">
-          <TiptapEditor
-            content={post.content}
-            onContentChange={(html) => {
-              setPost(prev => ({ ...prev!, content: html }));
-              calculateWordCount(html); // Update word count as content changes
-            }}
-            theme={theme}
-            onImageUploadStart={() => setIsEditorImageUploading(true)}
-            onImageUploadComplete={() => setIsEditorImageUploading(false)}
-            isImageUploading={isEditorImageUploading}
-            uploadProgress={editorUploadProgress} // You might need to update this state from the TiptapEditor itself
-          />
-        </div>
 
-        {/* Tags input */}
-        <div className={`mb-6 p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'} border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'}`}>
-          <label className={`block text-lg font-semibold mb-2 ${textColors[theme]}`}>
-            Tags
-          </label>
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            {post.tags.map(tag => (
-              <span key={tag} className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                theme === 'dark' ? 'bg-indigo-600 text-white' : 'bg-blue-100 text-blue-800'
-              }`}>
-                {tag}
-                <button
-                  type="button"
-                  onClick={() => removeTag(tag)}
-                  className="ml-2 -mr-0.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-white opacity-75 hover:opacity-100"
-                  aria-label={`Remove ${tag}`}
-                >
-                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
-              </span>
-            ))}
-            <input
-              type="text"
-              value={currentTagInput}
-              onChange={(e) => setCurrentTagInput(e.target.value)}
-              onKeyDown={handleTagsKeyDown}
-              placeholder="Add tags (e.g., fiction, adventure, short story)"
-              className={`flex-grow px-3 py-2 rounded-lg ${
-                theme === 'dark'
-                  ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
-                  : 'bg-white border-gray-300 text-black placeholder-gray-400'
-              } border focus:outline-none focus:ring-2 ${
-                theme === 'dark' ? 'focus:ring-indigo-600' : 'focus:ring-blue-500'
-              }`}
+          {/* TipTap Editor for Content */}
+          <div className={`
+            prose prose-lg
+            ${globalTheme === 'dark' ? 'prose-invert' : ''}
+            max-w-none overflow-hidden pb-6 md:pb-8
+            text-[var(--text-primary)]
+            relative
+            border border-[var(--border-color)] rounded-xl
+            hover:border-[var(--accent-color)]
+            focus-within:border-[var(--accent-color)] focus-within:ring-2 focus-within:ring-[var(--accent-color)] focus-within:ring-opacity-50
+            transition-all duration-300 ease-in-out
+            p-4 sm:p-6
+          `.replace(/\s+/g, ' ').trim()}>
+            <TiptapEditor
+              content={post.content}
+              onContentChange={(html) => {
+                setPost(prev => ({ ...prev!, content: html }));
+                parseContentForWordCount(html);
+              }}
+              onImageUpload={handleContentImageUploadRequest} // Pass the new handler
+              theme={globalTheme}
             />
           </div>
-          <p className="text-xs text-gray-400">Press Enter or comma to add a tag.</p>
-        </div>
-      </div>
-      
-      {/* Image cropper modal */}
-      {showImageCropper && cropImageUrl && (
+
+          {/* Tags input */}
+          <div className="mt-6 md:mt-8">
+            <label className={`block text-xl font-bold mb-3 text-[var(--text-primary)] opacity-80`}>
+              Tags
+              <p className={`text-sm font-normal mt-1 text-[var(--text-secondary)] opacity-80`}>
+                Categorize your story with relevant keywords (max 5 tags).
+              </p>
+            </label>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3 w-full">
+              {post.tags.map(tag => (
+                <span key={tag} className={`inline-flex items-center px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-sm sm:text-base font-medium transition-colors duration-200 shadow-sm
+                  bg-[var(--accent-color-light)] text-[var(--accent-color-dark)] hover:bg-[var(--accent-color-dark)] hover:text-[var(--accent-color-light)]
+                `}>
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => removeTag(tag)}
+                    className="ml-1.5 sm:ml-2 h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center rounded-full bg-current opacity-30 hover:opacity-50 transition-opacity"
+                    aria-label={`Remove ${tag}`}
+                  >
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                  </button>
+                </span>
+              ))}
+              <input
+                type="text"
+                value={currentTagInput}
+                onChange={(e) => setCurrentTagInput(e.target.value)}
+                onKeyDown={handleTagsKeyDown}
+                placeholder="Add a new tag..."
+                className={`flex-grow min-w-[120px] px-3 py-2 sm:px-4 sm:py-3 rounded-lg
+                  bg-[var(--background-primary)] border-[var(--border-color)] text-[var(--text-primary)] placeholder-[var(--text-secondary)]
+                border focus:outline-none focus:ring-2 focus:ring-[var(--accent-color)] focus:border-[var(--accent-color)] transition-all duration-200 text-sm sm:text-base`}
+              />
+            </div>
+            <p className={`text-xs sm:text-sm mt-1 text-[var(--text-secondary)] opacity-80`}>
+              Press Enter or comma to add a tag.
+            </p>
+          </div>
+        </section>
+      </main>
+
+      {/* Cover Image Cropper */}
+      {showCoverImageCropper && coverCropImageUrl && (
         <ImageCropper
-          imageUrl={cropImageUrl}
-          onCropComplete={handleCroppedImageUpload}
-          onCancel={handleCropperCancel}
-          aspectRatio={16 / 9} // Enforce 16:9 aspect ratio for cover image
+          imageUrl={coverCropImageUrl}
+          onCroppedImage={(croppedFile, dataUrl) => handleCroppedImageUpload(croppedFile, dataUrl, true)}
+          onCancel={() => handleCropperCancel(true)}
+          aspectRatio={16 / 9}
+          theme={globalTheme}
         />
       )}
-      
+
+      {/* Content Image Cropper (New) */}
+      {showContentImageCropper && contentCropImageUrl && (
+        <ImageCropper
+          imageUrl={contentCropImageUrl}
+          onCroppedImage={(croppedFile, dataUrl) => handleCroppedImageUpload(croppedFile, dataUrl, false)}
+          onCancel={() => handleCropperCancel(false)}
+          aspectRatio={4 / 3} // Common aspect ratio for content images, adjust as needed
+          theme={globalTheme}
+        />
+      )}
       {/* Footer */}
-      <footer className={`py-4 ${theme === 'dark' ? 'border-t border-gray-800 text-gray-400' : 'border-t border-gray-200 text-gray-500'}`}>
-        <div className="max-w-5xl mx-auto px-4 text-sm text-center">
+      <footer className={`py-4 sm:py-6 border-[var(--border-color)] border-t text-[var(--text-secondary)] opacity-70 shadow-inner mt-auto`}>
+        <div className="max-w-4xl mx-auto px-4 text-sm text-center">
           <p>Last updated: {post.updatedAt ? new Date(post.updatedAt).toLocaleString() : "N/A"}</p>
+          <p className="mt-1">© {new Date().getFullYear()} Talesy. All rights reserved.</p>
         </div>
       </footer>
     </div>

@@ -1,16 +1,16 @@
-// src/app/api/users/profile/route.ts
-import { NextResponse } from "next/server";
+// src/app/api/users/profile/route.ts (Updated - Focus on the projection)
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getMongoClient } from "@/lib/dbConnect"; // Keep this import, we'll use getMongoClient
-// import { ObjectId } from "mongodb"; // <--- REMOVE THIS LINE
-import mongoose from "mongoose"; // <--- Add this import
+import { getMongoClient } from "@/lib/dbConnect";
+import { ObjectId } from "mongodb"; // Use mongodb's ObjectId
 
-// Helper function for consistent ObjectId conversion (Updated)
-function toObjectId(id: string | mongoose.Types.ObjectId) { // <--- Changed type
-  if (typeof id === 'string' && mongoose.Types.ObjectId.isValid(id)) return new mongoose.Types.ObjectId(id); // <--- Use mongoose.Types.ObjectId
-  if (id instanceof mongoose.Types.ObjectId) return id; // <--- Check against mongoose.Types.ObjectId
-  throw new Error('Invalid ObjectId');
+// Helper function for consistent ObjectId conversion
+function toObjectId(id: string) {
+  if (!ObjectId.isValid(id)) {
+    throw new Error('Invalid ObjectId string');
+  }
+  return new ObjectId(id);
 }
 
 export async function GET() {
@@ -21,30 +21,55 @@ export async function GET() {
   }
 
   try {
-    const client = await getMongoClient(); // Use getMongoClient for the raw client
-    const db = client.db("talesy"); // Get the db from the raw client
+    const client = await getMongoClient();
+    const db = client.db("talesy"); // Your database name
 
-    // Prefer using _id from session if available, otherwise fallback to email
-    let userQuery;
+    const userCollection = db.collection("users");
+    const followsCollection = db.collection("follows");
+
+    let userIdObj: ObjectId;
     try {
-      // Ensure toObjectId uses mongoose.Types.ObjectId
-      userQuery = { _id: toObjectId(session.user.id) };
+      userIdObj = toObjectId(session.user.id);
     } catch (e) {
-      userQuery = { email: session.user.email };
+      console.error("Invalid session user ID format:", session.user.id, e);
+      return NextResponse.json({ error: "Invalid user ID format" }, { status: 400 });
     }
 
-    const user = await db.collection("users").findOne(userQuery);
+    // Fetch user details
+    const user = await userCollection.findOne(
+      { _id: userIdObj },
+      // *** THIS IS THE FIX: Only include fields, exclude password implicitly by not listing it ***
+      { projection: { _id: 1, name: 1, email: 1, username: 1, avatar: 1, image: 1, bio: 1, coverImage: 1 } }
+      // Alternatively, if you only want to exclude 'password' and nothing else, you could do:
+      // { projection: { password: 0 } } // But this would include ALL other fields.
+      // Since you explicitly listed fields, this current fix is best.
+    );
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // Fetch follower count for the current user
+    const followersCount = await followsCollection.countDocuments({
+      followingId: userIdObj,
+    });
+
+    // Fetch following count for the current user
+    const followingCount = await followsCollection.countDocuments({
+      followerId: userIdObj,
+    });
+
     return NextResponse.json({
       user: {
-        id: user._id.toString(),
+        _id: user._id.toString(),
         name: user.name || "",
-        avatar: user.avatar || "",
+        email: user.email || "",
+        username: user.username || null,
+        avatar: user.avatar || user.image || "/default-avatar.png",
         bio: user.bio || "",
+        coverImage: user.coverImage || "",
+        followersCount: followersCount,
+        followingCount: followingCount,
       },
     });
   } catch (error) {

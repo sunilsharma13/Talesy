@@ -1,36 +1,36 @@
 // app/api/posts/[id]/route.ts
 import { NextResponse } from 'next/server';
-import { getMongoClient } from '@/lib/dbConnect'; // <--- Change here
-import { ObjectId } from 'mongodb';
+import dbConnect from '@/lib/dbConnect';
+import Writing from '@/models/writing'; // Assuming your Mongoose model for posts is named 'Writing'
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
+import { authOptions } from '@/lib/auth'; // Ensure this path is correct
+import mongoose from 'mongoose';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    // Get the post ID from params
-    const { id: postId } = await params;
+    await dbConnect();
 
-    // Validate if the ID is a valid MongoDB ObjectId
-    if (!ObjectId.isValid(postId)) {
+    // params is an object, no need to await it
+    const { id: postId } = params;
+
+    if (!mongoose.Types.ObjectId.isValid(postId)) {
       return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
     }
 
-    const client = await getMongoClient(); // <--- Change here
-    const db = client.db('talesy');
-    const writingsCollection = db.collection('writings');
+    // Populate the 'author' field, selecting 'name', 'email', and 'image' (for avatar)
+    const writing = await Writing.findById(postId).populate('author', 'name email image');
 
-    // Find the post by ID
-    const post = await writingsCollection.findOne({
-      _id: new ObjectId(postId)
-    });
-
-    if (!post) {
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    if (!writing) {
+      return NextResponse.json({ error: 'Writing not found' }, { status: 404 });
     }
 
-    return NextResponse.json(post);
+    // Convert the Mongoose document to a plain JavaScript object
+    // This is crucial for proper JSON serialization, especially with populated fields.
+    const plainWriting = writing.toObject();
+
+    return NextResponse.json(plainWriting);
   } catch (error) {
-    console.error('Error fetching post:', error);
+    console.error('Error fetching writing:', error);
     return NextResponse.json(
       {
         error: 'Server error',
@@ -43,57 +43,58 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   try {
-    // Authenticate the user
     const session = await getServerSession(authOptions);
     if (!session || !session.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get the post ID from params
-    const postId = params.id;
+    await dbConnect();
 
-    if (!ObjectId.isValid(postId)) {
+    // params is an object, no need to await it
+    const { id: postId } = params;
+
+    if (!mongoose.Types.ObjectId.isValid(postId)) {
       return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
     }
 
-    const client = await getMongoClient(); // <--- Change here
-    const db = client.db('talesy');
-    const writingsCollection = db.collection('writings');
+    const writingToDelete = await Writing.findById(postId);
 
-    // Check ownership
-    const post = await writingsCollection.findOne({
-      _id: new ObjectId(postId),
-      userId: session.user.id,
-    });
-
-    if (!post) {
+    if (!writingToDelete) {
       return NextResponse.json(
         {
-          error: 'Post not found',
-          details: "The post may not exist or doesn't belong to you.",
+          error: 'Writing not found',
+          details: "The writing may not exist.",
         },
         { status: 404 }
       );
     }
 
-    // Delete the post
-    const result = await writingsCollection.deleteOne({
-      _id: new ObjectId(postId),
-    });
+    // Ensure the user trying to delete is the author of the writing
+    if (writingToDelete.author.toString() !== session.user.id) {
+      return NextResponse.json(
+        {
+          error: 'Unauthorized',
+          details: "You are not the author of this writing.",
+        },
+        { status: 403 }
+      );
+    }
 
-    if (result.deletedCount > 0) {
-      return NextResponse.json({ success: true });
+    const result = await Writing.findByIdAndDelete(postId);
+
+    if (result) {
+      return NextResponse.json({ success: true, message: 'Writing deleted successfully' });
     } else {
       return NextResponse.json(
         {
-          error: 'Failed to delete post',
-          details: 'The post was found but could not be deleted.',
+          error: 'Failed to delete writing',
+          details: 'The writing was found but could not be deleted.',
         },
         { status: 500 }
       );
     }
   } catch (error) {
-    console.error('Error deleting post:', error);
+    console.error('Error deleting writing:', error);
     return NextResponse.json(
       {
         error: 'Server error',

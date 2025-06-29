@@ -2,21 +2,41 @@
 "use client";
 
 import { useState } from "react";
-import { FaEye, FaEyeSlash } from 'react-icons/fa'; // Import eye icons
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import { motion } from 'framer-motion';
 
 interface RegisterFormProps {
   onRegister: () => void;
+  modalColors: {
+    backgroundPrimary: string;
+    backgroundSecondary: string;
+    textPrimary: string;
+    textSecondary: string;
+    textSecondaryFaded: string;
+    accentColor: string;
+    accentColorHover: string; // This is the color we need for hover
+    activeText: string;
+    borderColor: string;
+    borderColorSubtle: string;
+    shadowColorSubtle: string;
+    inputBackground: string;
+    inputBorder: string;
+    inputFocusRing: string;
+    errorBackground: string;
+    errorColor: string;
+    errorBorder: string;
+  };
 }
 
-export default function RegisterForm({ onRegister }: RegisterFormProps) {
+export default function RegisterForm({ onRegister, modalColors }: RegisterFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false); // New state for password visibility
-
+  const [showPassword, setShowPassword] = useState(false);
+  
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -50,14 +70,20 @@ export default function RegisterForm({ onRegister }: RegisterFormProps) {
   return (
     <form onSubmit={handleRegister} className="space-y-4">
       <div className="space-y-1">
-        <label htmlFor="name" className="text-xs font-medium text-gray-300">
+        <label htmlFor="name" className="block text-xs font-medium mb-1" style={{ color: modalColors.textSecondary }}>
           Full Name
         </label>
         <input
           id="name"
           type="text"
           placeholder="John Doe"
-          className="w-full rounded-lg bg-white/10 border border-white/20 px-4 py-2.5 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-transparent transition-all duration-300"
+          className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 transition-all duration-300"
+          style={{
+            backgroundColor: modalColors.inputBackground,
+            border: `1px solid ${modalColors.inputBorder}`,
+            color: modalColors.textPrimary,
+            '--tw-ring-color': modalColors.inputFocusRing,
+          } as React.CSSProperties}
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
@@ -65,14 +91,20 @@ export default function RegisterForm({ onRegister }: RegisterFormProps) {
       </div>
 
        <div className="space-y-1">
-        <label htmlFor="username" className="text-xs font-medium text-gray-300">
+        <label htmlFor="username" className="block text-xs font-medium mb-1" style={{ color: modalColors.textSecondary }}>
           Username
         </label>
         <input
           id="username"
           type="text"
           placeholder="johndoe123"
-          className="w-full rounded-lg bg-white/10 border border-white/20 px-4 py-2.5 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-transparent transition-all duration-300"
+          className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 transition-all duration-300"
+          style={{
+            backgroundColor: modalColors.inputBackground,
+            border: `1px solid ${modalColors.inputBorder}`,
+            color: modalColors.textPrimary,
+            '--tw-ring-color': modalColors.inputFocusRing,
+          } as React.CSSProperties}
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           required
@@ -80,59 +112,81 @@ export default function RegisterForm({ onRegister }: RegisterFormProps) {
       </div>
       
       <div className="space-y-1">
-        <label htmlFor="reg-email" className="text-xs font-medium text-gray-300">
+        <label htmlFor="reg-email" className="block text-xs font-medium mb-1" style={{ color: modalColors.textSecondary }}>
           Email Address
         </label>
         <input
           id="reg-email"
           type="email"
           placeholder="your@email.com"
-          className="w-full rounded-lg bg-white/10 border border-white/20 px-4 py-2.5 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-transparent transition-all duration-300"
+          className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 transition-all duration-300"
+          style={{
+            backgroundColor: modalColors.inputBackground,
+            border: `1px solid ${modalColors.inputBorder}`,
+            color: modalColors.textPrimary,
+            '--tw-ring-color': modalColors.inputFocusRing,
+          } as React.CSSProperties}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
         />
       </div>
 
-      <div className="space-y-1 relative"> {/* Added relative for positioning the eye icon */}
-        <label htmlFor="reg-password" className="text-xs font-medium text-gray-300">
+      <div className="space-y-1 relative">
+        <label htmlFor="reg-password" className="block text-xs font-medium mb-1" style={{ color: modalColors.textSecondary }}>
           Create Password
         </label>
         <input
           id="reg-password"
           type={showPassword ? "text" : "password"} 
           placeholder="••••••••"
-          className="w-full rounded-lg bg-white/10 border border-white/20 px-4 py-2.5 pr-10 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-transparent transition-all duration-300"
+          className="w-full px-4 py-2.5 pr-10 rounded-lg focus:outline-none focus:ring-2 transition-all duration-300"
+          style={{
+            backgroundColor: modalColors.inputBackground,
+            border: `1px solid ${modalColors.inputBorder}`,
+            color: modalColors.textPrimary,
+            '--tw-ring-color': modalColors.inputFocusRing,
+          } as React.CSSProperties}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
           minLength={8}
         />
         <button
-          type="button" // Important: type="button" to prevent form submission
+          type="button"
           onClick={togglePasswordVisibility}
-          className="absolute inset-y-0 right-0 pr-3 flex items-center pt-5 text-gray-400 hover:text-white focus:outline-none"
+          className="absolute top-1/2 -translate-y-1/2 right-3 flex items-center focus:outline-none"
+          style={{ color: modalColors.textSecondary }} // Ensure eye icon color is consistent
           title={showPassword ? "Hide password" : "Show password"}
         >
-          {showPassword ? <FaEyeSlash /> : <FaEye />} {/* Conditional rendering of eye icon */}
+          {showPassword ? <FaEyeSlash /> : <FaEye />}
         </button>
-        <p className="text-xs text-gray-400 mt-1">Password must be at least 8 characters</p>
+        <p className="text-xs mt-1" style={{ color: modalColors.textSecondaryFaded }}>Password must be at least 8 characters</p>
       </div>
 
       {error && (
-        <p className="text-sm text-red-300 bg-red-900/20 p-2 rounded-md">
+        <p className="text-sm p-2 rounded-md"
+           style={{ backgroundColor: modalColors.errorBackground, color: modalColors.errorColor, border: `1px solid ${modalColors.errorBorder}` }}>
           {error}
         </p>
       )}
 
-      <button
+      <motion.button
         type="submit"
         disabled={isLoading}
-        className="w-full rounded-lg bg-green-600 py-2.5 text-sm font-medium text-white hover:bg-green-700 transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed"
+        className="w-full py-2.5 font-medium rounded-lg transition-colors duration-300 disabled:opacity-70 disabled:cursor-not-allowed"
+        whileHover={{ scale: 1.01, boxShadow: `0 5px 15px ${modalColors.shadowColorSubtle}` }}
+        whileTap={{ scale: 0.99 }}
+        style={{
+          backgroundColor: modalColors.accentColor, // Use accent color for consistency
+          color: modalColors.activeText,
+          boxShadow: `0 4px 10px ${modalColors.shadowColorSubtle}`,
+          '--tw-bg-opacity': isLoading ? '0.7' : '1',
+        } as React.CSSProperties}
       >
         {isLoading ? (
           <span className="flex items-center justify-center">
-            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin -ml-1 mr-2 h-4 w-4" style={{ color: modalColors.activeText }} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
@@ -141,13 +195,23 @@ export default function RegisterForm({ onRegister }: RegisterFormProps) {
         ) : (
           "Create Account"
         )}
-      </button>
+      </motion.button>
 
-      <p className="text-xs text-center text-gray-400 mt-2">
+      <p className="text-xs text-center mt-2" style={{ color: modalColors.textSecondaryFaded }}>
         By registering, you agree to our
-        <a href="/terms" className="text-white hover:underline ml-1">Terms of Service</a>
+        <a href="/terms" className={`font-medium transition-colors duration-200 underline ml-1`}
+          style={{ color: modalColors.accentColor }} // Default color
+          // Tailwind hover class to use the accentColorHover
+          onMouseEnter={(e) => e.currentTarget.style.color = modalColors.accentColorHover}
+          onMouseLeave={(e) => e.currentTarget.style.color = modalColors.accentColor}
+        >Terms of Service</a>
         {" "}and{" "}
-        <a href="/privacy" className="text-white hover:underline">Privacy Policy</a>.
+        <a href="/privacy" className={`font-medium transition-colors duration-200 underline`}
+          style={{ color: modalColors.accentColor }} // Default color
+          // Tailwind hover class to use the accentColorHover
+          onMouseEnter={(e) => e.currentTarget.style.color = modalColors.accentColorHover}
+          onMouseLeave={(e) => e.currentTarget.style.color = modalColors.accentColor}
+        >Privacy Policy</a>.
       </p>
     </form>
   );

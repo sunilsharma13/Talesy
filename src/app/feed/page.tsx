@@ -1,4 +1,4 @@
-// app/feed/page.tsx
+// src/app/feed/page.tsx (Updated for consistent theming and type safety)
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
@@ -7,72 +7,36 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from "framer-motion";
-import FeedStoryCard from "@/components/FeedStoryCard"; // Import the new FeedStoryCard
+import StoryCard from "@/components/StoryCard";
 
-// Update the User interface to include followers, etc.
-// This interface reflects what the API should return when author info is populated
 interface Author {
   _id: string;
   name: string;
   avatar?: string;
-  isFollowing?: boolean; // indicates if current user is following this author
+  isFollowing?: boolean;
   followers?: number;
   followingCount?: number;
 }
 
-interface FeedWriting { // Renamed to FeedWriting to signify populated author
+interface FeedWriting {
   _id: string;
   title: string;
   content: string;
-  imageUrl?: string; // Optional image URL
-  userId: string; // The ID of the user who owns the story
+  imageUrl?: string;
   createdAt: string;
   likes?: number;
   comments?: number;
-  status?: "draft" | "published"; // Explicitly passed from HomeClient
-  isLikedByCurrentUser?: boolean; // New: To indicate if current user liked it
-  author: Author; // Populated author information
+  status?: "draft" | "published";
+  isLikedByCurrentUser?: boolean;
+  author: Author;
 }
 
-// Helper functions (moved here for direct use, or you can create a `lib/utils.ts`)
-const formatDate = (dateString: string): string => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffHours = diffMs / (1000 * 60 * 60);
-
-  if (diffHours < 1) {
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-    return `${diffMinutes}m ago`;
-  } else if (diffHours < 24) {
-    return `${Math.floor(diffHours)}h ago`;
-  } else if (diffHours < 24 * 7) { // Less than 7 days
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  } else {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-};
-
-const getExcerpt = (content: string, maxLength: number = 160): string => {
-  const plainText = content
-    .replace(/\*\*(.*?)\*\*/g, "$1")
-    .replace(/_(.*?)_/g, "$1")
-    .replace(/#+\s(.*?)(?:\n|$)/g, "$1 ")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
-    .replace(/!\[(.*?)\]\(.*?\)/g, "");
-
-  if (plainText.length <= maxLength) return plainText;
-  return plainText.substring(0, maxLength) + "...";
-};
-
-// Framer Motion Variants
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.08, // Stagger effect for cards
+      staggerChildren: 0.08,
     },
   },
 };
@@ -92,41 +56,109 @@ const itemVariants = {
 
 export default function FeedPage() {
   const { data: session, status } = useSession();
-  const [feedStories, setFeedStories] = useState<FeedWriting[]>([]); // Renamed posts to feedStories
+  const [feedStories, setFeedStories] = useState<FeedWriting[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"forYou" | "following">("forYou");
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const [followLoading, setFollowLoading] = useState<string | null>(null);
-  const [likeLoading, setLikeLoading] = useState<string | null>(null); // Keep track of specific post being liked
+  const [likeLoading, setLikeLoading] = useState<string | null>(null);
 
-  // Redirect unauthenticated users
+  // --- FIX FOR THEME TYPE ERROR AND CONSISTENCY ---
+  // Theme state: Aligned with HomeClient.tsx and StoryCard.tsx
+  const [theme, setTheme] = useState<"light" | "dark" | "talesy-accent">("dark");
+
+  // Helper to get CSS variables
+  const getDynamicThemeClass = (prop: string) => `var(--${prop})`;
+
+  // Theme-related colors/styles are now primarily handled via CSS variables
+  // in your global CSS (e.g., globals.css) which are then consumed by these `var(--...)`
+  // calls. This object mostly defines logical mappings for loading/error states.
+  const themeStyles = {
+    loadingBg: getDynamicThemeClass('background-secondary'), // Using a consistent background for loading
+    loadingText: getDynamicThemeClass('border-color'), // Using border-color for a subtle pulse effect
+    errorBg: getDynamicThemeClass('background-secondary'),
+    errorText: getDynamicThemeClass('red-color'), // Assuming a red-color CSS variable for errors
+  };
+  // --- END FIX ---
+
+  // Helper function to format date
+  const formatDate = useCallback((dateString: string): string => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+
+    if (diffHours < 1) {
+      const diffMinutes = Math.floor(diffMs / (1000 * 60));
+      return `${diffMinutes}m ago`;
+    } else if (diffHours < 24) {
+      return `${Math.floor(diffHours)}h ago`;
+    } else if (diffHours < 24 * 7) {
+      return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    } else {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+  }, []);
+
+  // Helper function to get excerpt from content
+  const getExcerpt = useCallback((content: string, maxLength: number = 160): string => {
+    if (!content) return "";
+    const plainText = content
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/_(.*?)_/g, "$1")
+      .replace(/#+\s(.*?)(?:\n|$)/g, "$1 ")
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+      .replace(/!\[(.*?)\]\(.*?\)/g, "");
+
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = plainText;
+    const finalPlainText = tempDiv.textContent || tempDiv.innerText || "";
+
+    if (finalPlainText.length <= maxLength) return finalPlainText;
+    return finalPlainText.substring(0, maxLength) + "...";
+  }, []);
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
     }
+    // Retrieve theme from localStorage, assuming a global theme switcher sets it.
+    const storedTheme = localStorage.getItem('theme');
+    // --- FIX: Check against the correct union type for validation ---
+    if (storedTheme && ['light', 'dark', 'talesy-accent'].includes(storedTheme)) {
+      setTheme(storedTheme as "light" | "dark" | "talesy-accent");
+      document.documentElement.setAttribute('data-theme', storedTheme); // Ensure HTML tag attribute is set
+    } else {
+      // Default to 'dark' if no theme or invalid theme found
+      setTheme("dark");
+      localStorage.setItem("theme", "dark");
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
   }, [status, router]);
 
-  // Fetch feed stories based on activeTab
   useEffect(() => {
     const fetchFeed = async () => {
-      if (status !== "authenticated") return;
+      if (status !== "authenticated") {
+        setLoading(false);
+        return;
+      }
 
       setLoading(true);
-      setError(null); // Clear previous errors
-      setFeedStories([]); // Clear previous stories
+      setError(null);
+      setFeedStories([]);
 
       try {
         const queryParams = new URLSearchParams();
         queryParams.append("publishedOnly", "true");
         queryParams.append("sortOrder", "latest");
-        queryParams.append("limit", "10"); // You can implement infinite scroll later
+        queryParams.append("limit", "10");
 
         if (activeTab === "following") {
           queryParams.append("following", "true");
         }
 
-        // Call the general posts API, which will now handle 'following' parameter
         const res = await fetch(`/api/posts?${queryParams.toString()}`);
 
         if (!res.ok) {
@@ -135,6 +167,20 @@ export default function FeedPage() {
         }
 
         const data: FeedWriting[] = await res.json();
+
+        // If "For You" tab is empty, and user has following, switch to "Following" tab
+        if (activeTab === "forYou" && data.length === 0 && session?.user?.id) {
+          const followingRes = await fetch(`/api/posts?publishedOnly=true&sortOrder=latest&limit=10&following=true`);
+          if (followingRes.ok) {
+            const followingData: FeedWriting[] = await followingRes.json();
+            if (followingData.length > 0) {
+              setFeedStories(followingData);
+              setActiveTab("following");
+              return; // Exit after setting feed and tab
+            }
+          }
+        }
+
         setFeedStories(data);
       } catch (err: any) {
         console.error("Error fetching feed:", err);
@@ -146,10 +192,9 @@ export default function FeedPage() {
     };
 
     fetchFeed();
-  }, [status, activeTab, session?.user?.id]); // Re-fetch when tab or auth status changes
+  }, [status, activeTab, session?.user?.id]);
 
-  // Handle follow/unfollow (logic mostly unchanged, but now updates local state for feedStories)
-  const handleFollowToggle = useCallback(async (userId: string, e: React.MouseEvent) => {
+  const handleFollowToggle = useCallback(async (userId: string, isCurrentlyFollowing: boolean, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -158,8 +203,11 @@ export default function FeedPage() {
       return;
     }
 
-    if (userId === session.user.id) return;
+    if (userId === session.user.id) {
+      return;
+    }
 
+    if (followLoading) return;
     setFollowLoading(userId);
 
     try {
@@ -171,7 +219,6 @@ export default function FeedPage() {
       if (res.ok) {
         const data = await res.json();
 
-        // Update the author's isFollowing and followers count in the current feedStories
         setFeedStories(prevStories =>
           prevStories.map(story => {
             if (story.author._id === userId) {
@@ -181,34 +228,35 @@ export default function FeedPage() {
                   ...story.author,
                   isFollowing: data.following,
                   followers: data.followers,
-                  followingCount: data.followingCount
                 }
               };
             }
             return story;
           })
+            .filter(story => !(activeTab === "following" && !data.following && story.author._id === userId))
         );
-
-        // If on "Following" tab and unfollowed, filter out posts from that user
-        if (activeTab === "following" && !data.following) {
-          setFeedStories(prevStories => prevStories.filter(post => post.userId !== userId));
-        }
 
         toast.success(data.following ? "Followed successfully!" : "Unfollowed successfully!");
       } else {
         const errorText = await res.text();
         console.error("Failed to follow/unfollow. Status:", res.status, "Error:", errorText);
-        toast.error("Failed to update follow status");
+        let message = "Failed to update follow status.";
+        try {
+          const errorJson = JSON.parse(errorText);
+          message = errorJson.message || message;
+        } catch (parseError) {
+          console.warn("Failed to parse error response as JSON:", parseError);
+        }
+        toast.error(message);
       }
     } catch (error) {
       console.error('Error toggling follow:', error);
-      toast.error("Something went wrong");
+      toast.error("Something went wrong with follow/unfollow.");
     } finally {
       setFollowLoading(null);
     }
-  }, [session?.user, activeTab, router]);
+  }, [session?.user, activeTab, router, followLoading]);
 
-  // Handle like (logic mostly unchanged, updates isLikedByCurrentUser)
   const handleLike = useCallback(async (postId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -227,126 +275,163 @@ export default function FeedPage() {
         headers: { 'Content-Type': 'application/json' }
       });
 
-      if (res.ok) {
-        const data = await res.json();
-
-        setFeedStories(prev =>
-          prev.map(post =>
-            post._id === postId
-              ? {
-                ...post,
-                likes: data.liked
-                  ? (post.likes || 0) + 1
-                  : Math.max((post.likes || 0) - 1, 0),
-                isLikedByCurrentUser: data.liked // Update the liked status
-              }
-              : post
-          )
-        );
-        toast.success(data.liked ? "Story liked!" : "Like removed!");
-      } else {
-        const errorText = await res.text();
-        console.error("Failed to like:", errorText);
-        toast.error("Failed to update like status");
+      if (!res.ok) {
+        const errorBody = await res.text();
+        let errorMessage = `Failed to like: ${res.statusText}`;
+        try {
+          const errorData = JSON.parse(errorBody);
+          errorMessage = errorData.message || errorMessage;
+        } catch (parseError) {
+          console.warn("Failed to parse error response as JSON:", parseError);
+          errorMessage = `Failed to like: ${res.statusText}. Response: ${errorBody.substring(0, 100)}...`;
+        }
+        throw new Error(errorMessage);
       }
+
+      const data = await res.json();
+
+      setFeedStories(prev =>
+        prev.map(post =>
+          post._id === postId
+            ? {
+              ...post,
+              likes: data.likesCount,
+              isLikedByCurrentUser: data.liked
+            }
+            : post
+        )
+      );
+      toast.success(data.liked ? "Story liked!" : "Like removed!");
     } catch (error) {
       console.error('Error liking post:', error);
-      toast.error("Failed to Like Post.");
+      toast.error(`Failed to update like status: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLikeLoading(null);
     }
   }, [session?.user, likeLoading, router]);
 
-  // Handle comment click
   const handleCommentClick = useCallback((postId: string) => {
     router.push(`/story/${postId}?openComments=true`);
   }, [router]);
 
-  // Render loading state (skeleton)
+  // Loading state with theme
   if (loading) {
     return (
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-700 rounded w-1/3 mb-8 mx-auto"></div> {/* For 'Stories' title */}
-          <div className="h-10 bg-gray-700 rounded-full w-full mb-8"></div> {/* For tab buttons */}
-          {[1, 2, 3].map(i => (
-            <div key={i} className="mb-6 bg-gray-800 rounded-xl p-5 shadow-lg">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 rounded-full bg-gray-700 mr-3"></div>
-                <div className="flex-1">
-                  <div className="h-4 bg-gray-700 rounded w-2/5 mb-2"></div>
-                  <div className="h-3 bg-gray-700 rounded w-1/4"></div>
+      <div className={`min-h-screen py-10 px-6`} style={{ backgroundColor: getDynamicThemeClass('background-primary') }}>
+        <div className="max-w-3xl mx-auto">
+          <div className="animate-pulse">
+            <div className={`h-8 ${themeStyles.loadingBg} rounded w-1/3 mb-8 mx-auto`}></div>
+            <div className={`h-10 ${themeStyles.loadingBg} rounded-full w-full mb-8`}></div>
+            {[1, 2, 3].map(i => (
+              <div key={i} className={`mb-6 rounded-xl p-5 shadow-lg`}
+                style={{ backgroundColor: getDynamicThemeClass('background-secondary') }}
+              >
+                <div className="flex items-center mb-4">
+                  <div className={`w-10 h-10 rounded-full overflow-hidden mr-3 ${themeStyles.loadingBg}`}></div>
+                  <div className="flex-1">
+                    <div className={`h-4 ${themeStyles.loadingText} rounded w-2/5 mb-2`}></div>
+                    <div className={`h-3 ${themeStyles.loadingText} rounded w-1/4`}></div>
+                  </div>
+                </div>
+                <div className={`h-48 ${themeStyles.loadingBg} rounded-lg mb-4`}></div>
+                <div className={`h-6 ${themeStyles.loadingText} rounded w-3/4 mb-3`}></div>
+                <div className={`h-4 ${themeStyles.loadingText} rounded w-full mb-2`}></div>
+                <div className={`h-4 ${themeStyles.loadingText} rounded w-5/6`}></div>
+                <div className="flex justify-between items-center mt-5">
+                  <div className={`h-5 ${themeStyles.loadingText} rounded w-1/5`}></div>
+                  <div className="flex gap-2">
+                    <div className={`h-8 w-8 ${themeStyles.loadingText} rounded-full`}></div>
+                    <div className={`h-8 w-8 ${themeStyles.loadingText} rounded-full`}></div>
+                  </div>
                 </div>
               </div>
-              <div className="h-48 bg-gray-700 rounded-lg mb-4"></div>
-              <div className="h-6 bg-gray-700 rounded w-3/4 mb-3"></div>
-              <div className="h-4 bg-gray-700 rounded w-full mb-2"></div>
-              <div className="h-4 bg-gray-700 rounded w-5/6"></div>
-              <div className="flex justify-between items-center mt-5">
-                <div className="h-5 bg-gray-700 rounded w-1/5"></div>
-                <div className="flex gap-2">
-                  <div className="h-8 w-8 bg-gray-700 rounded-full"></div>
-                  <div className="h-8 w-8 bg-gray-700 rounded-full"></div>
-                </div>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
-  // Render error message
+  // Error state with theme
   if (error) {
     return (
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-center">
-        <p className="text-xl text-red-500">
-          Error: {error}
-        </p>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-4 inline-block text-indigo-500 hover:underline"
+      <div className={`min-h-screen flex items-center justify-center p-6`}
+        style={{
+          backgroundColor: getDynamicThemeClass('background-primary'),
+          color: getDynamicThemeClass('text-primary')
+        }}
+      >
+        <div className={`text-center p-8 rounded-xl shadow-lg border`}
+          style={{
+            backgroundColor: themeStyles.errorBg,
+            borderColor: getDynamicThemeClass('border-color')
+          }}
         >
-          Retry
-        </button>
+          <h2 className={`text-2xl font-semibold mb-4`} style={{ color: themeStyles.errorText }}>Error Loading Feed</h2>
+          <p className={`mb-6`} style={{ color: getDynamicThemeClass('text-primary') }}>{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className={`px-6 py-3 text-white rounded-lg transition-colors`}
+            style={{
+              backgroundColor: getDynamicThemeClass('accent-color'),
+              color: getDynamicThemeClass('active-text'), // Assuming a variable for active button text
+              // The hover background will be handled by the direct class in your global CSS
+            }}
+          >
+            Try Again
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
     <motion.div
-      className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10"
+      className={`max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 min-h-screen`}
+      style={{
+        backgroundColor: getDynamicThemeClass('background-primary'),
+        color: getDynamicThemeClass('text-primary')
+      }}
       variants={containerVariants}
       initial="hidden"
       animate="visible"
     >
       <motion.h1
         variants={itemVariants}
-        className="text-3xl sm:text-4xl font-extrabold mb-8 text-white text-center"
+        className={`text-3xl sm:text-4xl font-extrabold mb-8 text-center`}
+        style={{ color: getDynamicThemeClass('text-primary') }}
       >
         Your Feed
       </motion.h1>
 
-      {/* Tab Navigation */}
       <motion.div
         variants={itemVariants}
-        className="flex mb-8 bg-gray-800 rounded-full p-1 shadow-lg"
+        className={`flex mb-8 rounded-full p-1 shadow-lg`}
+        style={{ backgroundColor: getDynamicThemeClass('background-secondary') }}
       >
         <button
           onClick={() => setActiveTab("forYou")}
           className={`flex-1 py-2 px-4 rounded-full text-center transition-all duration-300 ${activeTab === "forYou"
-            ? "bg-indigo-600 text-white font-medium shadow-md"
-            : "text-gray-400 hover:text-white"
+            ? 'font-medium shadow-md'
+            : ''
             }`}
+          style={{
+            backgroundColor: activeTab === "forYou" ? getDynamicThemeClass('accent-color') : 'transparent',
+            color: activeTab === "forYou" ? getDynamicThemeClass('active-text') : getDynamicThemeClass('text-secondary'),
+          }}
         >
           For You
         </button>
         <button
           onClick={() => setActiveTab("following")}
           className={`flex-1 py-2 px-4 rounded-full text-center transition-all duration-300 ${activeTab === "following"
-            ? "bg-indigo-600 text-white font-medium shadow-md"
-            : "text-gray-400 hover:text-white"
+            ? 'font-medium shadow-md'
+            : ''
             }`}
+          style={{
+            backgroundColor: activeTab === "following" ? getDynamicThemeClass('accent-color') : 'transparent',
+            color: activeTab === "following" ? getDynamicThemeClass('active-text') : getDynamicThemeClass('text-secondary'),
+          }}
         >
           Following
         </button>
@@ -360,16 +445,25 @@ export default function FeedPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
-            className="rounded-xl border border-gray-700 bg-gray-800 p-10 text-center shadow-lg"
+            className={`rounded-xl border p-10 text-center shadow-lg`}
+            style={{
+              backgroundColor: getDynamicThemeClass('background-secondary'),
+              borderColor: getDynamicThemeClass('border-color'),
+              color: getDynamicThemeClass('text-primary')
+            }}
           >
             <p className="text-5xl mb-4">🤔</p>
-            <h2 className="text-2xl font-semibold text-white mb-3">
+            <h2 className={`text-2xl font-semibold mb-3`}
+              style={{ color: getDynamicThemeClass('text-primary') }}
+            >
               {activeTab === "forYou"
                 ? "No stories to show right now"
                 : "No stories from people you follow yet."
               }
             </h2>
-            <p className="text-gray-400 mb-6 max-w-md mx-auto">
+            <p className={`mb-6 max-w-md mx-auto`}
+              style={{ color: getDynamicThemeClass('text-secondary') }}
+            >
               {activeTab === "forYou"
                 ? "It looks like the well is a bit dry! Check back later or start writing your own amazing stories."
                 : "Start following some fascinating authors to fill this feed with fresh tales. Or check out the 'For You' tab!"
@@ -377,7 +471,11 @@ export default function FeedPage() {
             </p>
             <Link
               href="/write/new"
-              className="mt-6 inline-flex items-center px-8 py-3 border border-transparent text-base font-medium rounded-full shadow-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-300 ease-in-out transform hover:scale-105"
+              className={`mt-6 inline-flex items-center px-8 py-3 border border-transparent text-base font-medium rounded-full shadow-md text-white transition duration-300 ease-in-out transform hover:scale-105`}
+              style={{
+                backgroundColor: getDynamicThemeClass('accent-color'),
+                color: getDynamicThemeClass('active-text'),
+              }}
             >
               Write a Story
             </Link>
@@ -394,22 +492,36 @@ export default function FeedPage() {
               {feedStories.map((story) => (
                 <motion.div
                   key={story._id}
-                  layout // For smooth layout transitions (e.g., when a post is removed after unfollowing)
+                  layout
                   variants={itemVariants}
                   initial="hidden"
                   animate="visible"
-                  exit="hidden" // Ensure it animates out
+                  exit="hidden"
                 >
-                  <FeedStoryCard
-                    story={story}
-                    formatDate={formatDate}
-                    getExcerpt={getExcerpt}
+                  <StoryCard
+                    _id={story._id}
+                    title={story.title}
+                    content={story.content}
+                    imageUrl={story.imageUrl}
+                    author={story.author}
+                    createdAt={story.createdAt}
+                    likes={story.likes}
+                    comments={story.comments}
+                    status={story.status}
+                    isLikedByCurrentUser={story.isLikedByCurrentUser}
                     onLike={handleLike}
                     onComment={handleCommentClick}
                     onFollowToggle={handleFollowToggle}
-                    followLoading={followLoading === story.author._id}
+                    followLoading={followLoading === story.author?._id}
                     likeLoading={likeLoading === story._id}
                     currentUserId={session?.user?.id || null}
+                    formatDate={formatDate}
+                    getExcerpt={getExcerpt}
+                    showAuthorInfo={true}
+                    showOwnerActions={false}
+                    defaultStoryImage="/default-story-image.png"
+                    defaultAvatar="/default-avatar.png" 
+                    theme={theme} // This prop is now correctly typed and passed
                   />
                 </motion.div>
               ))}

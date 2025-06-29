@@ -1,41 +1,42 @@
-// app/api/users/profile/update/route.ts
+// src/app/api/users/profile/update/route.ts (Updated)
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getMongoClient } from "@/lib/dbConnect"; // <--- Change here
-import { ObjectId } from "mongodb";
+import { getMongoClient } from "@/lib/dbConnect";
+import { ObjectId } from "mongodb"; // <--- Use mongodb's ObjectId
 
 // Helper function for consistent ObjectId conversion
-function toObjectId(id: string | ObjectId) {
-  if (typeof id === 'string' && ObjectId.isValid(id)) return new ObjectId(id);
-  if (id instanceof ObjectId) return id;
-  throw new Error('Invalid ObjectId');
+function toObjectId(id: string) { // <--- Only string input, returns mongodb.ObjectId
+  if (!ObjectId.isValid(id)) {
+    throw new Error('Invalid ObjectId string');
+  }
+  return new ObjectId(id);
 }
 
-export async function POST(req: Request) {
+export async function PUT(req: Request) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.id) { // Use session.user.id for authentication
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { name, bio, avatar } = await req.json();
+    // Include coverImage in destructured body
+    const { name, bio, avatar, coverImage } = await req.json();
 
-    if (!name?.trim()) { // Check for empty string after trimming
+    if (!name?.trim()) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
 
-    const client = await getMongoClient(); // <--- Change here
+    const client = await getMongoClient();
     const db = client.db("talesy");
 
-    // Find the user using session.user.id, which should map to _id
-    let userIdObj;
+    let userIdObj: ObjectId;
     try {
       userIdObj = toObjectId(session.user.id);
     } catch (e) {
-      console.error("Invalid session user ID format:", session.user.id);
+      console.error("Invalid session user ID format:", session.user.id, e);
       return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
     }
 
@@ -45,33 +46,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Update user with new data
+    // Prepare update fields
+    const updateFields: { [key: string]: any } = {
+      name,
+      bio: bio || null,
+      avatar: avatar || null,
+      updatedAt: new Date(),
+    };
+
+    // Only add coverImage to update if it was provided
+    if (coverImage !== undefined) {
+      updateFields.coverImage = coverImage || null;
+    }
+
     const updateResult = await db.collection("users").updateOne(
       { _id: existingUser._id },
-      {
-        $set: {
-          name,
-          bio: bio || null, // Store null if bio is empty
-          avatar: avatar || null, // Store null if avatar is empty
-          updatedAt: new Date(),
-        },
-      }
+      { $set: updateFields }
     );
 
     if (updateResult.modifiedCount === 0) {
-      // If no document was modified, it might mean the data was the same or an issue
-      console.warn("User profile update requested but no changes were made.", { userId: existingUser._id, name, bio, avatar });
-      // Optionally return a different message or status if no actual change happened
-      // return NextResponse.json({ success: true, message: "No changes detected or applied." });
+      console.warn("User profile update requested but no changes were made.", { userId: existingUser._id, name, bio, avatar, coverImage });
     }
 
     return NextResponse.json({
       success: true,
       user: {
-        id: existingUser._id.toString(), // Return the user's actual _id
+        _id: existingUser._id.toString(), // Use _id consistently
         name,
         bio,
         avatar,
+        coverImage: coverImage, // Return the updated coverImage
       },
     });
   } catch (error) {

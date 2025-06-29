@@ -1,25 +1,38 @@
-// app/api/writing/route.ts (assuming this path based on the content)
-import { NextResponse } from "next/server"; // Changed to NextResponse for consistency
-import { getMongoClient } from "@/lib/dbConnect"; // <--- Change here
-import { ObjectId } from "mongodb";
+// app/api/writing/route.ts
+import { NextResponse } from "next/server";
+// import { ObjectId } from "mongodb"; // <-- REMOVE THIS LINE
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import Writing from "@/models/writing";
+import User from "@/models/user";
+import mongoose from "mongoose"; // <-- ADD THIS LINE
 
 // Helper function for consistent ObjectId conversion
-function toObjectId(id: string | ObjectId) {
-  if (typeof id === 'string' && ObjectId.isValid(id)) return new ObjectId(id);
-  if (id instanceof ObjectId) return id;
-  throw new Error('Invalid ObjectId');
+// Use mongoose.Types.ObjectId for compatibility with Mongoose queries
+function toObjectId(id: string | mongoose.Types.ObjectId): mongoose.Types.ObjectId {
+  if (typeof id === 'string') {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      console.error(`Invalid ObjectId format received: ${id}`);
+      throw new Error('Invalid ObjectId');
+    }
+    return new mongoose.Types.ObjectId(id);
+  }
+  if (id instanceof mongoose.Types.ObjectId) {
+    return id;
+  }
+  // This case should ideally not be reached if types are handled correctly
+  console.error(`Unexpected type for ObjectId conversion: ${typeof id}, value: ${id}`);
+  throw new Error('Invalid ObjectId: Input not a string or mongoose ObjectId');
 }
+
 
 // GET handler
 export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     console.log("GET handler - Session:", session);
-    console.log("Session user object:", session?.user);
     
-    const userId = session?.user?.id; // Direct access, no need for || session?.user?.uid;
+    const userId = session?.user?.id;
     console.log("User ID to use:", userId);
     
     if (!userId) {
@@ -27,63 +40,48 @@ export async function GET(req: Request) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const client = await getMongoClient(); // <--- Change here
-    console.log("Connected to MongoDB!");
-    const db = client.db("talesy");
-
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
     const status = url.searchParams.get("status");
 
+    // Ensure DB connection is established for every route handler
+    // (If your dbConnect.ts handles caching, calling it multiple times is fine)
+    await mongoose.connect(process.env.MONGODB_URI!); // Ensure connected, replace with your dbConnect if it's not global
+
     if (id) {
       let objectId;
       try {
-        objectId = toObjectId(id); // Use helper function
-      } catch (e) {
-        console.error("Invalid ObjectId format:", id, e);
-        return NextResponse.json({ message: "Invalid ID format" }, { status: 400 });
+        objectId = toObjectId(id);
+      } catch (e: any) {
+        console.error("Invalid ObjectId format for GET by ID:", id, e.message);
+        return NextResponse.json({ message: "Invalid ID format: " + e.message }, { status: 400 });
       }
       
-      const doc = await db.collection("writings").findOne({
-        _id: objectId
-      });
+      const writing = await Writing.findById(objectId);
 
-      console.log("Fetched document:", doc);
+      console.log("Fetched document:", writing);
 
-      if (!doc) {
+      if (!writing) {
         return NextResponse.json({ message: "Writing not found" }, { status: 404 });
       }
 
-      // Check if the user has access to this document
-      // Convert doc.userId to ObjectId if it's a string, then compare
-      const docUserIdObj = toObjectId(doc.userId); // Ensure this is also an ObjectId
-      const sessionUserIdObj = toObjectId(userId);
-
-      if (!docUserIdObj.equals(sessionUserIdObj)) { // Compare ObjectIds using .equals()
-        console.log("User doesn't own this document. Doc userId:", doc.userId, "Session userId:", userId);
+      // Use .equals for comparison with ObjectId
+      if (!writing.author.equals(toObjectId(userId))) {
+        console.log("User doesn't own this document. Writing author:", writing.author, "Session userId:", userId);
         return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
       }
 
-      return NextResponse.json(doc);
+      return NextResponse.json(writing);
     } else if (status) {
-      const writings = await db
-        .collection("writings")
-        .find({ userId: userId, status }) // userId is already consistent here
-        .toArray();
-
+      const writings = await Writing.find({ author: toObjectId(userId), status })
+                                    .sort({ createdAt: -1 }); // Sort by newest first
       console.log(`Fetched ${writings.length} writings with status ${status}`);
-
       return NextResponse.json(writings);
     } else {
       // If no ID or status, return all user's writings
-      const writings = await db
-        .collection("writings")
-        .find({ userId: userId }) // userId is already consistent here
-        .sort({ createdAt: -1 }) // Sort by newest first
-        .toArray();
-
+      const writings = await Writing.find({ author: toObjectId(userId) })
+                                    .sort({ createdAt: -1 }); // Sort by newest first
       console.log(`Fetched all ${writings.length} writings for user`);
-
       return NextResponse.json(writings);
     }
   } catch (error: any) {
@@ -98,7 +96,7 @@ export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
     console.log("POST handler - Session:", session);
     
-    const userId = session?.user?.id;
+    const userId = session?.user?.id; // This is the string ID from next-auth session
     console.log("Session user object:", session?.user);
     console.log("User ID to use:", userId);
     
@@ -116,40 +114,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Invalid JSON in request body" }, { status: 400 });
     }
 
-    const { title, content, imageUrl, status } = body;
+    const { title, content, imageUrl, status, genre, isPublic, tags } = body; // Added tags
 
-    if (!title?.trim() || !content?.trim()) { // Added trim and combined check
+    if (!title?.trim() || !content?.trim()) {
       console.log("Missing required fields:", { title, content });
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
     }
 
-    const client = await getMongoClient(); // <--- Change here
-    console.log("Connected to MongoDB!");
-    const db = client.db("talesy");
+    await mongoose.connect(process.env.MONGODB_URI!); // Ensure connected
 
-    const now = new Date();
-    
-    const newDoc = {
+    // --- Using Mongoose Model for insertion ---
+    const newWriting = new Writing({
       title,
       content,
       imageUrl: imageUrl || "",
-      userId: toObjectId(userId),  // Store userId as ObjectId
-      createdAt: now,
-      updatedAt: now,
+      author: toObjectId(userId), // Assign userId to the 'author' field
       status: status || "draft",
-      likes: 0, // Initialize likes and comments count
+      genre: genre || "",
+      isPublic: isPublic || false,
+      likes: 0,
       comments: 0,
-    };
+      tags: tags || [], // Ensure tags are handled
+    });
 
-    console.log("Inserting document:", newDoc);
+    console.log("Attempting to save document via Mongoose:", newWriting);
     
-    const result = await db.collection("writings").insertOne(newDoc);
+    const result = await newWriting.save();
     
-    console.log("Created post with ID:", result.insertedId);
+    console.log("Created writing with ID (Mongoose):", result._id);
 
     return NextResponse.json({ 
       message: "Writing created", 
-      id: result.insertedId 
+      id: result._id 
     }, { status: 201 });
   } catch (error: any) {
     console.error("Error in POST handler:", error.message, error.stack);
@@ -180,7 +176,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ message: "Invalid JSON in request body" }, { status: 400 });
     }
 
-    const { title, content, imageUrl, status } = body;
+    const { title, content, imageUrl, status, genre, isPublic, tags } = body; // Destructure all fields including tags
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
     
@@ -192,103 +188,91 @@ export async function PUT(req: Request) {
 
     let objectId;
     try {
-      objectId = toObjectId(id); // Use helper function
-    } catch (e) {
-      console.error("Invalid ObjectId format:", id, e);
-      return NextResponse.json({ message: "Invalid ID format" }, { status: 400 });
+      objectId = toObjectId(id);
+    } catch (e: any) {
+      console.error("Invalid ObjectId format for PUT:", id, e.message);
+      return NextResponse.json({ message: "Invalid ID format: " + e.message }, { status: 400 });
     }
 
-    const client = await getMongoClient(); // <--- Change here
-    console.log("Connected to MongoDB!");
-    const db = client.db("talesy");
+    await mongoose.connect(process.env.MONGODB_URI!); // Ensure connected
 
-    const writing = await db.collection("writings").findOne({
-      _id: objectId
-    });
-
+    // --- Using Mongoose Model for update ---
+    const writing = await Writing.findById(objectId);
+    
     console.log("Found writing:", writing);
     
     if (!writing) {
       return NextResponse.json({ message: "Writing not found" }, { status: 404 });
     }
 
-    const docUserIdObj = toObjectId(writing.userId); // Ensure this is also an ObjectId
-    const sessionUserIdObj = toObjectId(userId);
-
-    if (!docUserIdObj.equals(sessionUserIdObj)) { // Compare ObjectIds using .equals()
-      console.log("Writing owner mismatch. Writing userId:", writing.userId, "Session userId:", userId);
+    // Check ownership using Mongoose document's author field
+    if (!writing.author.equals(toObjectId(userId))) {
+      console.log("Writing owner mismatch. Writing author:", writing.author, "Session userId:", userId);
       return NextResponse.json({ message: "You don't have permission to edit this writing" }, { status: 403 });
     }
 
-    if (!title?.trim() || !content?.trim()) { // Added trim and combined check
+    if (!title?.trim() || !content?.trim()) {
       return NextResponse.json({ message: "Title and content are required" }, { status: 400 });
     }
 
-    const updateFields: any = { 
-      title, 
-      content, 
-      imageUrl: imageUrl || writing.imageUrl || "", 
-      updatedAt: new Date() 
-    };
+    // Update fields directly on the Mongoose document
+    writing.title = title;
+    writing.content = content;
+    writing.imageUrl = imageUrl || "";
+    if (status) writing.status = status;
+    if (genre) writing.genre = genre;
+    if (typeof isPublic === 'boolean') writing.isPublic = isPublic;
+    if (tags) writing.tags = tags; // Update tags
+    writing.updatedAt = new Date();
 
-    if (status) {
-      updateFields.status = status;
-    }
+    const result = await writing.save();
 
-    const result = await db.collection("writings").updateOne(
-      { _id: objectId },
-      { $set: updateFields }
-    );
-
-    console.log("Update result:", result);
-
-    if (result.matchedCount === 0) {
-      return NextResponse.json({ message: "Writing not found or no changes made" }, { status: 404 }); // Changed message slightly
-    }
+    console.log("Updated writing (Mongoose):", result);
 
     // Sync to posts if published
     if (status === "published") {
-      // Fetch latest data from 'writings' after update to ensure consistency
-      const updatedWriting = await db.collection("writings").findOne({ _id: objectId });
+      const { getMongoClient } = await import("@/lib/dbConnect"); // Import only when needed
+      const client = await getMongoClient();
+      const db = client.db("talesy");
 
-      if (updatedWriting) {
-        const existingPost = await db.collection("posts").findOne({ writingId: objectId });
+      const existingPost = await db.collection("posts").findOne({ writingId: objectId });
 
-        const postData = {
-          writingId: objectId,
-          title: updatedWriting.title,
-          content: updatedWriting.content,
-          imageUrl: updatedWriting.imageUrl || "",
-          userId: toObjectId(updatedWriting.userId), // Ensure userId in posts is ObjectId
-          status: "published",
-          createdAt: existingPost?.createdAt || new Date(), // Preserve original createdAt if exists
-          updatedAt: new Date(),
-          likes: updatedWriting.likes || 0, // Include likes and comments counts
-          comments: updatedWriting.comments || 0,
-        };
+      const postData = {
+        writingId: objectId,
+        title: result.title, // Use result.title
+        content: result.content, // Use result.content
+        imageUrl: result.imageUrl || "",
+        userId: toObjectId(result.author),
+        status: "published",
+        createdAt: existingPost?.createdAt || result.createdAt,
+        updatedAt: new Date(),
+        likes: result.likes || 0,
+        comments: result.comments || 0,
+        tags: result.tags || [], // Include tags in postData
+      };
 
-        if (!existingPost) {
-          await db.collection("posts").insertOne(postData);
-          console.log("Created new published post");
-        } else {
-          await db.collection("posts").updateOne(
-            { writingId: objectId },
-            { $set: postData }
-          );
-          console.log("Updated existing published post");
-        }
+      if (!existingPost) {
+        await db.collection("posts").insertOne(postData);
+        console.log("Created new published post");
       } else {
-        console.warn("Updated writing not found for post sync. This should not happen.");
+        await db.collection("posts").updateOne(
+          { writingId: objectId },
+          { $set: postData }
+        );
+        console.log("Updated existing published post");
       }
     } else if (status !== "published" && writing.status === "published") {
       // If status changed from published to something else (draft/deleted), remove from posts
+      const { getMongoClient } = await import("@/lib/dbConnect");
+      const client = await getMongoClient();
+      const db = client.db("talesy");
       await db.collection("posts").deleteOne({ writingId: objectId });
       console.log("Removed from posts collection due to status change");
     }
 
     return NextResponse.json({ 
       message: "Writing updated successfully", 
-      id: id 
+      id: id // Returning the string ID is fine for the client
     }, { status: 200 });
   } catch (error: any) {
     console.error("Error in PUT handler:", error.message, error.stack);
@@ -319,40 +303,36 @@ export async function DELETE(req: Request) {
 
     let objectId;
     try {
-      objectId = toObjectId(id); // Use helper function
-    } catch (e) {
-      console.error("Invalid ObjectId format:", id, e);
-      return NextResponse.json({ message: "Invalid ID format" }, { status: 400 });
+      objectId = toObjectId(id);
+    } catch (e: any) {
+      console.error("Invalid ObjectId format for DELETE:", id, e.message);
+      return NextResponse.json({ message: "Invalid ID format: " + e.message }, { status: 400 });
     }
 
-    const client = await getMongoClient(); // <--- Change here
-    console.log("Connected to MongoDB!");
-    const db = client.db("talesy");
+    await mongoose.connect(process.env.MONGODB_URI!); // Ensure connected
 
-    const writing = await db.collection("writings").findOne({
-      _id: objectId
-    });
+    // --- Using Mongoose Model for find and update ---
+    const writing = await Writing.findById(objectId);
     
     if (!writing) {
       return NextResponse.json({ message: "Writing not found" }, { status: 404 });
     }
 
-    const docUserIdObj = toObjectId(writing.userId); // Ensure this is also an ObjectId
-    const sessionUserIdObj = toObjectId(userId);
-
-    if (!docUserIdObj.equals(sessionUserIdObj)) { // Compare ObjectIds using .equals()
-      console.log("Writing owner mismatch. Writing userId:", writing.userId, "Session userId:", userId);
+    if (!writing.author.equals(toObjectId(userId))) {
+      console.log("Writing owner mismatch. Writing author:", writing.author, "Session userId:", userId);
       return NextResponse.json({ message: "You don't have permission to delete this writing" }, { status: 403 });
     }
 
-    const result = await db.collection("writings").updateOne(
-      { _id: objectId },
-      { $set: { status: "deleted", updatedAt: new Date() } }
-    );
+    writing.status = "deleted";
+    writing.updatedAt = new Date();
+    await writing.save();
 
-    console.log("Delete (soft) result:", result);
+    console.log("Delete (soft) result for writing:", writing._id);
 
     // Also remove from posts collection if it was published
+    const { getMongoClient } = await import("@/lib/dbConnect");
+    const client = await getMongoClient();
+    const db = client.db("talesy");
     await db.collection("posts").deleteOne({ writingId: objectId });
     console.log("Removed from posts collection if existed");
 

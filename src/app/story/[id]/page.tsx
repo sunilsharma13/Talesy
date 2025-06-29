@@ -1,14 +1,22 @@
+// app/story/[id]/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter, useSearchParams, useParams } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { storage } from "@/lib/firebase";
 import { deleteObject, ref } from "firebase/storage";
-import Image from "next/image";
-import CommentSection from "@/components/CommentSection";
+import CommentSection from "@/components/CommentSection"; // Make sure this path is correct
 import { toast } from "react-hot-toast";
 import Link from "next/link";
+import Image from "next/image";
+
+interface PopulatedAuthor {
+  _id: string;
+  name: string;
+  email?: string;
+  image?: string;
+}
 
 interface Story {
   _id: string;
@@ -19,11 +27,7 @@ interface Story {
   createdAt: string;
   likes?: number;
   comments?: number;
-  userId: string;
-  user?: {
-    name: string;
-    avatar?: string;
-  };
+  author: PopulatedAuthor | string;
 }
 
 interface User {
@@ -39,84 +43,124 @@ interface User {
 export default function StoryDetailPage() {
   const { data: session } = useSession();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const params = useParams();
-  const openComments = searchParams?.get("openComments") === "true";
 
   const [story, setStory] = useState<Story | null>(null);
   const [author, setAuthor] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
-  const [likeLoading, setLikeLoading] = useState<string | null>(null);
+  const [likeLoading, setLikeLoading] = useState(false);
+  const [userHasLiked, setUserHasLiked] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
-  const [showComments, setShowComments] = useState(openComments);
+  // Theme state
+  const [theme, setTheme] = useState<"light" | "dark" | "talesy-accent">("dark");
+
 
   const storyId = params.id as string;
 
+  // Helper function to get dynamic CSS variables
+  const getDynamicThemeClass = (prop: string) => `var(--${prop})`;
+
   useEffect(() => {
-    const fetchStory = async () => {
+    // Set theme from localStorage on mount
+    const storedTheme = localStorage.getItem('theme');
+    if (storedTheme && ['light', 'dark', 'talesy-accent'].includes(storedTheme)) {
+      setTheme(storedTheme as "light" | "dark" | "talesy-accent");
+      document.documentElement.setAttribute('data-theme', storedTheme);
+    } else {
+      // Default to dark if no theme or invalid theme is stored
+      setTheme("dark");
+      localStorage.setItem("theme", "dark");
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+
+    const fetchStoryAndLikes = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`/api/posts/${storyId}`);
-        
-        if (!res.ok) {
-          throw new Error(`Failed to fetch story: ${res.statusText}`);
-        }
-        
-        const data = await res.json();
-        setStory(data);
+        const storyRes = await fetch(`/api/posts/${storyId}`);
 
-        // Fetch author info
-        if (data.userId) {
-          const authorRes = await fetch(`/api/users/${data.userId}`);
+        if (!storyRes.ok) {
+          throw new Error(`Failed to fetch story: ${storyRes.statusText}`);
+        }
+        const storyData: Story = await storyRes.json();
+        setStory(storyData);
+
+        let currentAuthorId: string | null = null;
+        if (storyData.author) {
+          if (typeof storyData.author === 'object' && storyData.author !== null && '_id' in storyData.author) {
+            currentAuthorId = (storyData.author as PopulatedAuthor)._id.toString();
+          } else if (typeof storyData.author === 'string') {
+            currentAuthorId = storyData.author;
+          }
+        }
+
+        if (currentAuthorId) {
+          const authorRes = await fetch(`/api/users/${currentAuthorId}`);
           if (authorRes.ok) {
-            const authorData = await authorRes.json();
+            const authorData: User = await authorRes.json();
             setAuthor(authorData);
 
-            // Check if current user is following the author
-            if (session?.user?.id && session.user.id !== data.userId) {
-              const followRes = await fetch(`/api/users/${data.userId}/follow`);
+            if (session?.user?.id && session.user.id !== currentAuthorId) {
+              const followRes = await fetch(`/api/users/${currentAuthorId}/follow`);
               if (followRes.ok) {
                 const followData = await followRes.json();
                 setAuthor(prev => {
                   if (!prev) return null;
-                  return {...prev, isFollowing: followData.following};
+                  return { ...prev, isFollowing: followData.following };
                 });
               }
             }
+          } else {
+            console.error("Failed to fetch author data:", authorRes.status, authorRes.statusText);
+            setAuthor(null);
+          }
+        } else {
+          console.log("No valid author ID found in story data.");
+          setAuthor(null);
+        }
+
+        if (session?.user?.id) {
+          const likeStatusRes = await fetch(`/api/posts/${storyId}/like`);
+          if (likeStatusRes.ok) {
+            const likeStatusData = await likeStatusRes.json();
+            setUserHasLiked(likeStatusData.userHasLiked);
+          } else {
+            console.error("Failed to fetch like status:", likeStatusRes.status, likeStatusRes.statusText);
           }
         }
+
       } catch (error) {
-        console.error("Error fetching story:", error);
+        console.error("Error fetching story, author, or like status:", error);
         toast.error("Failed to load story");
+        setStory(null);
       } finally {
         setLoading(false);
       }
     };
 
-    if (storyId) fetchStory();
+    if (storyId) fetchStoryAndLikes();
   }, [storyId, session?.user?.id]);
 
-  const toggleComments = () => {
-    setShowComments((prev) => !prev);
-  };
-
-  // Format the story content as HTML (sanitize if needed)
   const formatContent = (content: string) => {
     if (!content) return "";
-
-    // Convert markdown-like formatting to HTML
+    // Check if content already contains common HTML tags to avoid double formatting
+    const isAlreadyHtml = /<\/?(p|div|span|strong|em|ul|ol|li|h[1-6]|br)>/i.test(content);
+    if (isAlreadyHtml) {
+      return content;
+    }
+    // Basic Markdown to HTML conversion
     let formattedContent = content
-      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*(.*?)\*/g, "<em>$1</em>")
-      .replace(/^# (.*?)$/gm, "<h1>$1</h1>")
-      .replace(/^## (.*?)$/gm, "<h2>$1</h2>")
-      .replace(/^### (.*?)$/gm, "<h3>$1</h3>")
-      .replace(/^- (.*?)$/gm, "<li>$1</li>")
-      .replace(/\n/g, "<br>");
+      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>") // **bold**
+      .replace(/\*(.*?)\*/g, "<em>$1</em>") // *italic*
+      .replace(/^# (.*?)$/gm, "<h1>$1</h1>") // # Heading 1
+      .replace(/^## (.*?)$/gm, "<h2>$1</h2>") // ## Heading 2
+      .replace(/^### (.*?)$/gm, "<h3>$1</h3>") // ### Heading 3
+      .replace(/^- (.*?)$/gm, "<li>$1</li>") // - List item
+      .replace(/\n/g, "<br>"); // New lines to <br>
 
     return formattedContent;
   };
+
 
   const formatDate = (dateString: string): string => {
     try {
@@ -127,7 +171,7 @@ export default function StoryDetailPage() {
         year: "numeric",
       });
     } catch {
-      return "";
+      return ""; // Return empty string for invalid dates
     }
   };
 
@@ -138,17 +182,19 @@ export default function StoryDetailPage() {
       setDeleteLoading(id);
       console.log(`Deleting story with ID: ${id}`);
 
-      // Delete image
+      // Handle image deletion from Firebase or local uploads
       if (imageUrl) {
         try {
           if (imageUrl.startsWith("/uploads/")) {
+            // Local upload deletion
             const imgRes = await fetch("/api/upload/delete", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ filePath: imageUrl }),
             });
-            console.log("Image deletion result:", imgRes.ok ? "Success" : "Failed");
+            console.log("Image deletion result (local):", imgRes.ok ? "Success" : "Failed");
           } else if (imageUrl.includes("firebase")) {
+            // Firebase storage deletion
             const imageRef = ref(storage, imageUrl);
             await deleteObject(imageRef);
             console.log("Firebase image deleted");
@@ -158,6 +204,7 @@ export default function StoryDetailPage() {
         }
       }
 
+      // Delete the post from the database
       const res = await fetch(`/api/posts/${id}`, {
         method: "DELETE",
         credentials: "include",
@@ -167,7 +214,7 @@ export default function StoryDetailPage() {
       try {
         data = await res.json();
       } catch (e) {
-        console.error("Error parsing response:", e);
+        console.error("Error parsing delete response:", e);
       }
 
       if (!res.ok) {
@@ -175,7 +222,7 @@ export default function StoryDetailPage() {
       }
 
       toast.success("Story deleted successfully!");
-      router.push("/dashboard");
+      router.push("/dashboard"); // Redirect after successful deletion
     } catch (error) {
       console.error("Delete error:", error);
       toast.error(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -187,15 +234,15 @@ export default function StoryDetailPage() {
   const handleLike = async (id: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (!session?.user) {
-      router.push('/login');
+      router.push('/login'); // Prompt login if not authenticated
       return;
     }
-    
-    if (likeLoading) return;
-    setLikeLoading(id);
-    
+
+    if (likeLoading) return; // Prevent multiple clicks
+    setLikeLoading(true);
+
     try {
       const res = await fetch(`/api/posts/${id}/like`, {
         method: "POST",
@@ -203,20 +250,29 @@ export default function StoryDetailPage() {
       });
 
       if (!res.ok) {
-        throw new Error(`Failed to like story: ${res.statusText}`);
+        const errorBody = await res.text();
+        let errorMessage = `Failed to like story: ${res.statusText}`;
+        try {
+          const errorData = JSON.parse(errorBody);
+          errorMessage = errorData.message || errorMessage;
+        } catch (parseError) {
+          console.warn("Failed to parse error response as JSON:", parseError);
+          errorMessage = `Failed to like story: ${res.statusText}. Response: ${errorBody.substring(0, 100)}...`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await res.json();
-      
-      // Update the story's like count based on server response
+
       setStory(prev => {
         if (!prev) return prev;
         return {
           ...prev,
-          likes: data.liked ? (prev.likes || 0) + 1 : Math.max((prev.likes || 0) - 1, 0)
+          likes: data.likesCount // Update likes count from response
         };
       });
-      
+      setUserHasLiked(data.liked); // Update like status
+
       if (data.liked) {
         toast.success("Story liked!");
       } else {
@@ -224,22 +280,22 @@ export default function StoryDetailPage() {
       }
     } catch (error) {
       console.error("Error liking post:", error);
-      toast.error("Failed to update like status");
+      toast.error(`Failed to update like status: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      setLikeLoading(null);
+      setLikeLoading(false);
     }
   };
-  
+
   const handleFollow = async () => {
     if (!session?.user) {
       router.push('/login');
       return;
     }
-    
+
     if (!author || author._id === session.user.id || followLoading) return;
-    
+
     setFollowLoading(true);
-    
+
     try {
       const res = await fetch(`/api/users/${author._id}/follow`, {
         method: 'POST',
@@ -251,19 +307,18 @@ export default function StoryDetailPage() {
       }
 
       const data = await res.json();
-      
-      // Update the author with new following status and follower count
+
       setAuthor(prev => {
         if (!prev) return null;
         return {
           ...prev,
           isFollowing: data.following,
-          followers: data.following 
-            ? (prev.followers || 0) + 1 
+          followers: data.following
+            ? (prev.followers || 0) + 1
             : Math.max((prev.followers || 0) - 1, 0)
         };
       });
-      
+
       toast.success(data.following ? "Author followed successfully!" : "Unfollowed author");
     } catch (error) {
       console.error("Error following author:", error);
@@ -273,17 +328,22 @@ export default function StoryDetailPage() {
     }
   };
 
+  // Determine author ID safely
+  const displayAuthorId = typeof story?.author === 'object' && story.author !== null
+    ? story.author._id.toString()
+    : (story?.author || null);
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 py-10 px-6">
+      <div className="min-h-screen py-10 px-6" style={{ backgroundColor: getDynamicThemeClass('background-primary') }}>
         <div className="max-w-4xl mx-auto">
           <div className="animate-pulse">
-            <div className="h-10 bg-gray-700 rounded w-3/4 mb-6"></div>
-            <div className="h-64 bg-gray-800 rounded-lg mb-6"></div>
+            <div className="h-10 rounded w-3/4 mb-6" style={{ backgroundColor: getDynamicThemeClass('background-secondary') }}></div>
+            <div className="h-64 rounded-lg mb-6" style={{ backgroundColor: getDynamicThemeClass('background-secondary') }}></div>
             <div className="space-y-3">
-              <div className="h-4 bg-gray-700 rounded w-full"></div>
-              <div className="h-4 bg-gray-700 rounded w-5/6"></div>
-              <div className="h-4 bg-gray-700 rounded w-4/6"></div>
+              <div className="h-4 rounded w-full" style={{ backgroundColor: getDynamicThemeClass('background-secondary') }}></div>
+              <div className="h-4 rounded w-5/6" style={{ backgroundColor: getDynamicThemeClass('background-secondary') }}></div>
+              <div className="h-4 rounded w-4/6" style={{ backgroundColor: getDynamicThemeClass('background-secondary') }}></div>
             </div>
           </div>
         </div>
@@ -293,13 +353,25 @@ export default function StoryDetailPage() {
 
   if (!story) {
     return (
-      <div className="min-h-screen bg-gray-900 py-10 px-6 flex items-center justify-center">
+      <div className="min-h-screen py-10 px-6 flex items-center justify-center" style={{ backgroundColor: getDynamicThemeClass('background-primary') }}>
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-white mb-4">Story Not Found</h2>
-          <p className="text-gray-400 mb-6">The story you're looking for doesn't seem to exist.</p>
-          <button 
+          <h2 className="text-2xl font-bold mb-4" style={{ color: getDynamicThemeClass('text-primary') }}>Story Not Found</h2>
+          <p className="mb-6" style={{ color: getDynamicThemeClass('text-secondary') }}>The story you're looking for doesn't seem to exist.</p>
+          <button
             onClick={() => router.push("/dashboard")}
-            className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            className="px-5 py-2.5 rounded-lg transition-colors"
+            style={{
+              backgroundColor: getDynamicThemeClass('accent-color'),
+              color: getDynamicThemeClass('active-text'),
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = getDynamicThemeClass('active-bg');
+              e.currentTarget.style.color = getDynamicThemeClass('text-primary');
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = getDynamicThemeClass('accent-color');
+              e.currentTarget.style.color = getDynamicThemeClass('active-text');
+            }}
           >
             Go to Dashboard
           </button>
@@ -309,12 +381,19 @@ export default function StoryDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 py-10 px-6">
+    <div className="min-h-screen py-10 px-6" style={{ backgroundColor: getDynamicThemeClass('background-primary') }}>
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <button 
-            onClick={() => router.push("/dashboard")} 
-            className="flex items-center text-indigo-400 hover:text-indigo-300 transition-colors mb-4"
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="flex items-center transition-colors mb-4"
+            style={{ color: getDynamicThemeClass('accent-color') }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = getDynamicThemeClass('active-bg');
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = getDynamicThemeClass('accent-color');
+            }}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -322,126 +401,194 @@ export default function StoryDetailPage() {
             Back to Dashboard
           </button>
         </div>
-        
-        {/* Story header with author info */}
-        <div className="bg-gray-800 border border-gray-700/50 rounded-xl overflow-hidden shadow-lg mb-8">
-          {/* Author info */}
-          <div className="p-5 border-b border-gray-700/50 flex justify-between items-center">
+
+        <div className="rounded-xl overflow-hidden shadow-lg mb-8"
+          style={{
+            backgroundColor: getDynamicThemeClass('background-secondary'),
+            border: `1px solid ${getDynamicThemeClass('border-color')}`
+          }}
+        >
+          <div className="p-5 flex justify-between items-center"
+            style={{ borderBottom: `1px solid ${getDynamicThemeClass('border-color')}` }}
+          >
             <div className="flex items-center gap-3">
-              <Link 
-                href={`/profile/${story.userId}`}
-                className="w-10 h-10 rounded-full bg-gray-700 overflow-hidden"
+              <Link
+                href={`/profile/${displayAuthorId}`}
+                className="w-10 h-10 rounded-full overflow-hidden"
+                style={{ backgroundColor: getDynamicThemeClass('background-tertiary') }}
               >
                 {author?.avatar ? (
-                  <img
+                  <Image
                     src={author.avatar}
                     alt={author.name}
+                    width={40}
+                    height={40}
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <img 
-                    src="/logo.png" 
+                  <Image
+                    src="/logo.png" // Placeholder if no author avatar
                     alt="Talesy Logo"
+                    width={40}
+                    height={40}
                     className="w-full h-full object-cover"
                   />
                 )}
               </Link>
-              
+
               <div>
-                <Link 
-                  href={`/profile/${story.userId}`}
-                  className="font-medium text-white hover:text-indigo-300 transition-colors"
+                <Link
+                  href={`/profile/${displayAuthorId}`}
+                  className="font-medium hover:text-indigo-300 transition-colors"
+                  style={{ color: getDynamicThemeClass('text-primary') }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = getDynamicThemeClass('accent-color');
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = getDynamicThemeClass('text-primary');
+                  }}
                 >
                   {author?.name || "Unknown Author"}
                 </Link>
-                <p className="text-gray-400 text-xs flex items-center gap-1">
+                <p className="text-xs flex items-center gap-1" style={{ color: getDynamicThemeClass('text-secondary') }}>
                   <span>{formatDate(story.createdAt)}</span>
                   {author?.followers !== undefined && (
-                    <span className="mx-2 text-gray-500">•</span>
+                    <span className="mx-2" style={{ color: getDynamicThemeClass('text-secondary-faded') }}>•</span>
                   )}
                   {author?.followers !== undefined && (
-                    <span>{author.followers} followers</span>
+                    <span>{author.followers} follower{author.followers !== 1 ? 's' : ''}</span>
                   )}
                 </p>
               </div>
             </div>
-          
+
             {session?.user && author && session.user.id !== author._id && (
               <button
                 onClick={handleFollow}
                 disabled={followLoading}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  author.isFollowing
-                    ? "bg-gray-700 hover:bg-gray-600 text-white"
-                    : "bg-indigo-600 hover:bg-indigo-700 text-white"
-                } ${followLoading ? "opacity-70 cursor-not-allowed" : ""}`}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${followLoading ? "opacity-70 cursor-not-allowed" : ""}`}
+                style={{
+                  backgroundColor: author.isFollowing
+                    ? getDynamicThemeClass('background-tertiary')
+                    : getDynamicThemeClass('accent-color'),
+                  color: author.isFollowing
+                    ? getDynamicThemeClass('text-primary')
+                    : getDynamicThemeClass('active-text'),
+                }}
+                onMouseEnter={(e) => {
+                  if (author.isFollowing) {
+                    e.currentTarget.style.backgroundColor = getDynamicThemeClass('border-color');
+                  } else {
+                    e.currentTarget.style.backgroundColor = getDynamicThemeClass('active-bg');
+                    e.currentTarget.style.color = getDynamicThemeClass('text-primary');
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (author.isFollowing) {
+                    e.currentTarget.style.backgroundColor = getDynamicThemeClass('background-tertiary');
+                  } else {
+                    e.currentTarget.style.backgroundColor = getDynamicThemeClass('accent-color');
+                    e.currentTarget.style.color = getDynamicThemeClass('active-text');
+                  }
+                }}
               >
                 {followLoading ? "Loading..." : author.isFollowing ? "Following" : "Follow"}
               </button>
             )}
           </div>
-          
-          {/* Story Title */}
-          <div className="p-5">
-            <h1 className="text-3xl font-bold text-white mb-4">{story.title}</h1>
 
-            {/* Story Cover Image */}
+          <div className="p-5">
+            <h1 className="text-3xl font-bold mb-4" style={{ color: getDynamicThemeClass('text-primary') }}>{story.title}</h1>
+
             {story.imageUrl && (
               <div className="mb-6 w-full">
-                <img 
+                <Image
                   src={story.imageUrl}
                   alt={story.title}
+                  width={800}
+                  height={500}
                   className="w-full max-h-[500px] object-cover rounded-lg"
+                  priority
                 />
               </div>
             )}
 
-            {/* Full Story Content */}
-            <div className="prose prose-invert prose-lg max-w-none">
-              <div 
-                className="text-gray-300 leading-relaxed"
+            {/* Apply theme colors to content generated by dangerouslySetInnerHTML.
+                This assumes the prose class is correctly configured in your global CSS
+                to use the CSS variables. */}
+            <div className={`prose max-w-none`} style={{ color: getDynamicThemeClass('text-secondary') }}>
+              <div
+                className="leading-relaxed"
                 dangerouslySetInnerHTML={{ __html: formatContent(story.content) }}
               />
             </div>
 
-            {/* Action buttons */}
-            <div className="mt-8 pt-4 border-t border-gray-700/50 flex justify-between items-center">
+
+            <div className="mt-8 pt-4 flex justify-between items-center"
+              style={{ borderTop: `1px solid ${getDynamicThemeClass('border-color')}` }}
+            >
               <div className="flex gap-4">
                 <button
                   onClick={(e) => handleLike(story._id, e)}
-                  disabled={likeLoading === story._id}
-                  className="flex items-center gap-2 text-gray-400 hover:text-red-400 transition-colors"
+                  disabled={likeLoading}
+                  className={`flex items-center gap-2 transition-colors ${userHasLiked ? 'text-red-400' : ''}`}
+                  style={{ color: userHasLiked ? getDynamicThemeClass('liked-color') : getDynamicThemeClass('text-secondary') }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = userHasLiked ? getDynamicThemeClass('liked-color-hover') : getDynamicThemeClass('accent-color');
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = userHasLiked ? getDynamicThemeClass('liked-color') : getDynamicThemeClass('text-secondary');
+                  }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill={userHasLiked ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                   </svg>
                   {story.likes || 0} Like{(story.likes || 0) !== 1 ? 's' : ''}
                 </button>
-                
-                <button
-                  onClick={toggleComments}
-                  className="flex items-center gap-2 text-gray-400 hover:text-blue-400 transition-colors"
-                >
+
+                <div className="flex items-center gap-2" style={{ color: getDynamicThemeClass('text-secondary') }}>
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                   {story.comments || 0} Comment{(story.comments || 0) !== 1 ? 's' : ''}
-                </button>
+                </div>
               </div>
-              
-              {session?.user?.id === story.userId && (
+
+              {session?.user && session.user.id === displayAuthorId && (
                 <div className="flex gap-3">
                   <Link
                     href={`/write/${story._id}`}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    className="px-4 py-2 rounded-lg transition-colors"
+                    style={{
+                      backgroundColor: getDynamicThemeClass('accent-color'),
+                      color: getDynamicThemeClass('active-text'),
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = getDynamicThemeClass('active-bg');
+                      e.currentTarget.style.color = getDynamicThemeClass('text-primary');
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = getDynamicThemeClass('accent-color');
+                      e.currentTarget.style.color = getDynamicThemeClass('active-text');
+                    }}
                   >
                     Edit
                   </Link>
-                  
+
                   <button
                     onClick={() => handleDelete(story._id, story.imageUrl)}
                     disabled={deleteLoading === story._id}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                    className="px-4 py-2 rounded-lg transition-colors"
+                    style={{
+                      backgroundColor: getDynamicThemeClass('danger-color'),
+                      color: getDynamicThemeClass('active-text'),
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = getDynamicThemeClass('danger-color-hover');
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = getDynamicThemeClass('danger-color');
+                    }}
                   >
                     {deleteLoading === story._id ? "Deleting..." : "Delete"}
                   </button>
@@ -450,9 +597,9 @@ export default function StoryDetailPage() {
             </div>
           </div>
         </div>
-        
-        {/* Comment Section */}
-        {showComments && <CommentSection postId={story._id} />}
+
+        {/* Passing the theme prop to CommentSection */}
+        <CommentSection postId={story._id} theme={theme} />
       </div>
     </div>
   );

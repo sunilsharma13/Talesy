@@ -1,199 +1,371 @@
-// components/StoryCard.tsx
+// src/components/StoryCard.tsx (Final & Comprehensive Update with Theme and Loading States)
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
-import React, { useEffect, useState } from "react";
 import Image from "next/image";
+import {
+  HeartIcon,
+  ChatBubbleLeftIcon,
+  PencilSquareIcon,
+  TrashIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  UserPlusIcon,
+  UserMinusIcon,
+  BookOpenIcon
+} from "@heroicons/react/24/outline";
+import { HeartIcon as HeartSolidIcon } from "@heroicons/react/24/solid";
+import { motion } from "framer-motion";
+import { useCallback } from "react";
+
+// --- Type Definitions ---
+interface Author {
+  _id: string;
+  name: string;
+  avatar?: string | null;
+  isFollowing?: boolean;
+  followers?: number;
+}
 
 interface StoryCardProps {
   _id: string;
   title: string;
   content: string;
-  imageUrl?: string; // Optional image URL
-  userId: string; // The ID of the user who owns the story
+  imageUrl?: string | null;
+  className?: string;
+  author: Author;
   createdAt: string;
   likes?: number;
   comments?: number;
-  status?: "draft" | "published"; // Explicitly passed from HomeClient
-  deleteLoading?: boolean; // Loading state for delete action
-  likeLoading?: boolean; // Loading state for like action
-  onDelete: (storyId: string, storyImageUrl?: string) => Promise<void>; // Delete handler
-  onLike: (id: string, e: React.MouseEvent) => void; // Like handler
-  onComment: (id: string) => void; // Comment handler (navigates to comments)
-  formatDate: (dateString: string) => string; // Helper function for date formatting
-  getExcerpt: (content: string, maxLength?: number) => string; // Helper function for content excerpt
+  status?: "draft" | "published";
+  isLikedByCurrentUser?: boolean;
+  onDelete?: (storyId: string, storyImageUrl?: string | null) => void;
+  onLike: (storyId: string, e: React.MouseEvent) => void;
+  onComment: (storyId: string) => void;
+  onEdit?: (storyId: string, e: React.MouseEvent) => void;
+  onFollowToggle?: (userId: string, isCurrentlyFollowing: boolean, e: React.MouseEvent) => void;
+  followLoading?: boolean;
+  likeLoading?: boolean;
+  deleteLoading?: boolean;
+  currentUserId: string | null;
+  formatDate: (dateString: string) => string;
+  getExcerpt: (content: string, maxLength?: number) => string;
+  showAuthorInfo?: boolean;
+  showOwnerActions?: boolean;
+  showAuthorFollowers?: boolean;
+  defaultStoryImage: string;
+  defaultAvatar: string;
+  theme: "light" | "dark" | "talesy-accent";
 }
 
-const StoryCard: React.FC<StoryCardProps> = ({
+// --- Component Definition ---
+const StoryCard = ({
   _id,
   title,
   content,
   imageUrl,
-  userId,
+  author,
+  className,
   createdAt,
-  status,
   likes = 0,
   comments = 0,
-  deleteLoading,
-  likeLoading,
+  status,
+  isLikedByCurrentUser = false,
   onDelete,
   onLike,
   onComment,
+  onEdit,
+  onFollowToggle,
+  followLoading = false,
+  likeLoading = false,
+  deleteLoading = false,
+  currentUserId,
   formatDate,
   getExcerpt,
-}) => {
-  const router = useRouter();
-  const { data: session } = useSession();
-  const [mounted, setMounted] = useState(false);
+  showAuthorInfo = true,
+  showOwnerActions = false,
+  showAuthorFollowers = true,
+  defaultStoryImage,
+  defaultAvatar,
+  theme,
+}: StoryCardProps) => {
+  const isOwner = currentUserId === author._id;
+  const isFollowing = author.isFollowing ?? false;
 
-  // Fallback for imageUrl in case it's null/undefined or an empty string
-  const displayImageUrl = imageUrl && imageUrl.trim() !== '' ? imageUrl : "/placeholder-image.jpg";
+  // Helper to get CSS variable values
+  const getDynamicThemeClass = useCallback((prop: string) => `var(--${prop})`, []);
 
-  // Content excerpt: Ensure it's only generated after mounting if `getExcerpt` relies on DOM,
-  // otherwise, it can be done directly. For now, keeping it consistent with your approach.
-  const excerpt = mounted ? getExcerpt(content, 150) : ""; // Increased excerpt length for better preview
-
-  useEffect(() => {
-    setMounted(true);
+  // --- Click Handlers (Memoized) ---
+  const handleAuthorClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
   }, []);
 
-  const isOwner = session?.user?.id === userId;
+  const handleLikeClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onLike(_id, e);
+  }, [onLike, _id]);
+
+  const handleCommentClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onComment(_id);
+  }, [onComment, _id]);
+
+  const handleDeleteClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onDelete) onDelete(_id, imageUrl);
+  }, [onDelete, _id, imageUrl]);
+
+  const handleEditClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onEdit) onEdit(_id, e);
+  }, [onEdit, _id]);
+
+  const handleFollowClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onFollowToggle) onFollowToggle(author._id, isFollowing, e);
+  }, [onFollowToggle, author._id, isFollowing]);
+
+  // --- Derived State ---
+  const displayStatus = status
+    ? status.charAt(0).toUpperCase() + status.slice(1)
+    : "Unknown";
+
+  // ** REFINED FIX: Ensure image URLs are always valid strings **
+  // Filter out null, undefined, and the string "undefined" or empty string ""
+  const getSafeImageUrl = (url: string | null | undefined, fallback: string): string => {
+    if (typeof url === 'string' && url.length > 0 && url !== "undefined") {
+      return url;
+    }
+    return fallback;
+  };
+
+  const finalImageUrl = getSafeImageUrl(imageUrl, defaultStoryImage);
+  const finalAuthorAvatar = getSafeImageUrl(author.avatar, defaultAvatar);
 
   return (
-    <div className="bg-gray-800 border border-gray-700/50 rounded-xl overflow-hidden hover:border-indigo-500/30 transition-all duration-300 hover:shadow-xl shadow-lg flex flex-col h-full">
-      {/* Card Header with Image and Link */}
-      <Link href={`/story/${_id}`} className="block relative">
-        {/* Use a div for image container for consistent sizing */}
-        <div className="relative w-full h-56 overflow-hidden">
-          <Image
-            src={displayImageUrl}
-            alt={title}
-            fill
-            style={{ objectFit: "cover" }}
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            className="transition-transform duration-500 hover:scale-105"
-            onError={(e) => {
-              // Fallback for image loading error
-              const target = e.target as HTMLImageElement;
-              target.src = "/placeholder-image.jpg"; // Set to a local placeholder if external image fails
-            }}
-          />
-
-          {/* Status Badge - Overlay on image */}
-          <div className="absolute top-3 right-3 z-10">
-            <span
-              className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                status === "published"
-                  ? "bg-green-600/90 text-white"
-                  : "bg-amber-500/90 text-white"
-              }`}
-            >
-              {status === "published" ? "Published" : "Draft"}
-            </span>
-          </div>
+    <motion.div
+      className={`rounded-xl shadow-md transition-all duration-300 overflow-hidden flex flex-col cursor-pointer h-full border
+        ${deleteLoading || likeLoading || followLoading ? 'opacity-70 pointer-events-none' : 'hover:shadow-lg hover:translate-y-[-5px]'}
+        ${className || ''}`}
+      style={{
+        backgroundColor: getDynamicThemeClass('background-secondary'),
+        color: getDynamicThemeClass('text-primary'),
+        borderColor: getDynamicThemeClass('border-color'),
+      }}
+      onClick={() => window.location.href = `/story/${_id}`}
+    >
+      <div className="relative h-48 w-full">
+        <Image
+          src={finalImageUrl}
+          alt={title}
+          layout="fill"
+          objectFit="cover"
+          className="rounded-t-xl"
+          // ** ADDED sizes PROP for performance **
+          // This tells Next.js how wide the image will be at different breakpoints
+          // Adjust these values based on your actual CSS layout for the image
+          // For a max-w-3xl (48rem) container on larger screens, and full width on mobile
+          sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, 33vw"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            if (target.src !== defaultStoryImage) {
+                target.src = defaultStoryImage;
+            }
+          }}
+        />
+        {/* Status Tag - Uses dynamic theme colors for published/draft, falls back to text-secondary */}
+        <div
+          className={`absolute top-3 left-3 px-3 py-1 rounded-full text-xs font-semibold flex items-center shadow-md z-10 text-white`}
+          style={{
+            backgroundColor: status === "published"
+              ? 'var(--green-color, #22c55e)'
+              : status === "draft"
+                ? 'var(--yellow-color, #f59e0b)'
+                : getDynamicThemeClass('text-secondary'),
+            color: status === "published" || status === "draft" ? 'white' : getDynamicThemeClass('background-primary'),
+          }}
+        >
+          {status === "published" ? (
+            <CheckCircleIcon className="w-3 h-3 mr-1" />
+          ) : status === "draft" ? (
+            <ClockIcon className="w-3 h-3 mr-1" />
+          ) : (
+            <BookOpenIcon className="w-3 h-3 mr-1" />
+          )}
+          <span>{displayStatus}</span>
         </div>
-      </Link>
+      </div>
 
-      {/* Card Content */}
-      <div className="p-5 flex flex-col flex-grow">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-gray-400 text-xs">{formatDate(createdAt)}</span>
-
-          {/* Like Counter at top right (now separate from like button for clarity) */}
-          <div className="flex items-center text-red-400 text-xs gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-            </svg>
-            {likes}
-          </div>
-        </div>
-
-        {/* Title with Link (still clickable, but image also links now) */}
-        <Link href={`/story/${_id}`} className="group">
-          <h3 className="font-bold text-xl mb-3 text-white group-hover:text-indigo-300 transition-colors line-clamp-2">
-            {title}
-          </h3>
-        </Link>
-
-        {/* Story Excerpt */}
-        <p className="text-gray-300 line-clamp-3 text-sm flex-grow mb-4">
-          {excerpt || "No content preview available."} {/* Fallback text if excerpt is empty */}
-        </p>
-
-        {/* Actions Bar */}
-        <div className="mt-auto pt-3 border-t border-gray-700/50 flex justify-between items-center">
-          {/* Comments count */}
-          <button
-            onClick={() => onComment(_id)}
-            className="text-gray-400 hover:text-blue-400 transition flex items-center gap-1 text-sm"
-            title="View comments"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </svg>
-            {comments} comments
-          </button>
-
-          {/* Action Buttons */}
-          <div className="flex gap-2 items-center">
-            {/* Like Button */}
-            <button
-              disabled={likeLoading}
-              onClick={(e) => onLike(_id, e)}
-              title="Like"
-              className="flex items-center justify-center p-1.5 rounded-full text-white bg-gray-700 hover:bg-red-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {likeLoading ? (
-                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-                </svg>
-              )}
-            </button>
-
-            {/* Edit Button - only show if user owns the story */}
-            {isOwner && (
-              <button
-                onClick={() => router.push(`/write/${_id}`)}
-                title="Edit"
-                className="flex items-center justify-center p-1.5 rounded-full text-white bg-gray-700 hover:bg-amber-500 transition"
+      <div className="p-6 flex flex-col flex-grow">
+        {showAuthorInfo && (
+          <div className="flex items-center mb-4 cursor-pointer" onClick={handleAuthorClick}>
+            <Link href={`/profile/${author._id}`} className="flex items-center group">
+              <div
+                className={`relative w-10 h-10 rounded-full overflow-hidden mr-3`}
+                style={{ backgroundColor: getDynamicThemeClass('border-color') }}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                </svg>
-              </button>
-            )}
-
-            {/* Delete Button - only show if user owns the story */}
-            {isOwner && (
-              <button
-                onClick={() => onDelete(_id, imageUrl)} // Pass imageUrl to onDelete
-                disabled={deleteLoading}
-                title="Delete"
-                className="flex items-center justify-center p-1.5 rounded-full text-white bg-gray-700 hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                <Image
+                  src={finalAuthorAvatar} // <-- Using the ensured valid avatar URL
+                  alt={author.name}
+                  layout="fill"
+                  objectFit="cover"
+                  // ** ADDED sizes PROP for performance **
+                  sizes="40px" // A fixed size for the avatar
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    if (target.src !== defaultAvatar) {
+                        target.src = defaultAvatar;
+                    }
+                  }}
+                />
+              </div>
+              <div className="flex-1">
+                <p
+                  className={`text-sm font-semibold group-hover:text-[var(--accent-color)] transition-colors`}
+                  style={{ color: getDynamicThemeClass('text-primary') }}
+                >
+                  {author.name}
+                </p>
+                {showAuthorFollowers && author.followers !== undefined && (
+                  <p
+                    className={`text-xs`}
+                    style={{ color: getDynamicThemeClass('text-secondary') }}
+                  >
+                    {author.followers} Followers
+                  </p>
+                )}
+              </div>
+            </Link>
+            {!isOwner && currentUserId && (
+              <motion.button
+                onClick={handleFollowClick}
+                className={`ml-auto px-3 py-1 text-xs rounded-full flex items-center transition-all duration-300 border
+                  ${followLoading ? 'opacity-70 cursor-not-allowed' : ''}
+                  ${isFollowing ? 'hover:bg-[var(--hover-bg)] hover:text-[var(--accent-color)]' : 'hover:opacity-80'}`}
+                style={{
+                  backgroundColor: isFollowing ? getDynamicThemeClass('background-secondary') : getDynamicThemeClass('accent-color'),
+                  color: isFollowing ? getDynamicThemeClass('text-primary') : 'white',
+                  borderColor: isFollowing ? getDynamicThemeClass('border-color') : getDynamicThemeClass('accent-color'),
+                }}
+                disabled={followLoading}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
               >
-                {deleteLoading ? (
-                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                {followLoading ? (
+                  <svg className={`animate-spin -ml-1 mr-1 h-3 w-3`} style={{ color: isFollowing ? getDynamicThemeClass('text-primary') : 'white' }} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
+                ) : isFollowing ? (
+                  <>
+                    <UserMinusIcon className="w-3 h-3 mr-1" /> Unfollow
+                  </>
                 ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
+                  <>
+                    <UserPlusIcon className="w-3 h-3 mr-1" /> Follow
+                  </>
                 )}
-              </button>
+              </motion.button>
+            )}
+          </div>
+        )}
+
+        <h3
+          className={`text-xl font-bold mb-2 leading-tight line-clamp-2`}
+          style={{ color: getDynamicThemeClass('text-primary') }}
+        >
+          <Link
+            href={`/story/${_id}`}
+            className="hover:text-[var(--accent-color)] transition-colors"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {title}
+          </Link>
+        </h3>
+        <p
+          className={`text-sm mb-4 line-clamp-3 flex-grow overflow-hidden`}
+          style={{ color: getDynamicThemeClass('text-secondary') }}
+        >
+          {getExcerpt(content, 120)}
+        </p>
+
+        <div
+          className={`mt-auto flex items-center justify-between text-sm pt-4 border-t`}
+          style={{
+            color: getDynamicThemeClass('text-secondary'),
+            borderColor: getDynamicThemeClass('border-color'),
+          }}
+        >
+          <div className="flex items-center space-x-2">
+            <span>{formatDate(createdAt)}</span>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            {/* Like Button */}
+            <motion.button
+              onClick={handleLikeClick}
+              className={`flex items-center group ${likeLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+              disabled={likeLoading}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+            >
+              {likeLoading ? (
+                <svg className={`animate-spin h-4 w-4`} style={{ color: getDynamicThemeClass('accent-color') }} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : isLikedByCurrentUser ? (
+                <HeartSolidIcon className={`w-5 h-5`} style={{ color: getDynamicThemeClass('red-color') }} />
+              ) : (
+                <HeartIcon className={`w-5 h-5 group-hover:text-[var(--accent-color)] transition-colors`} style={{ color: getDynamicThemeClass('text-secondary') }} />
+              )}
+              <span className={`ml-1`} style={{ color: getDynamicThemeClass('text-primary') }}>{likes ?? 0}</span>
+            </motion.button>
+
+            {/* Comment Button */}
+            <motion.button
+              onClick={handleCommentClick}
+              className="flex items-center group"
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+            >
+              <ChatBubbleLeftIcon className={`w-5 h-5 group-hover:text-[var(--accent-color)] transition-colors`} style={{ color: getDynamicThemeClass('text-secondary') }} />
+              <span className={`ml-1`} style={{ color: getDynamicThemeClass('text-primary') }}>{comments ?? 0}</span>
+            </motion.button>
+
+            {/* Owner Actions (Edit & Delete) */}
+            {showOwnerActions && isOwner && (
+              <>
+                <motion.button
+                  onClick={handleEditClick}
+                  className="group"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <PencilSquareIcon className={`w-5 h-5 group-hover:text-[var(--accent-color)] transition-colors`} style={{ color: getDynamicThemeClass('text-secondary') }} />
+                </motion.button>
+                <motion.button
+                  onClick={handleDeleteClick}
+                  className="group"
+                  disabled={deleteLoading}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  {deleteLoading ? (
+                    <svg className={`animate-spin h-5 w-5`} style={{ color: getDynamicThemeClass('red-color') }} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : (
+                    <TrashIcon className={`w-5 h-5 group-hover:text-[var(--red-color)] transition-colors`} style={{ color: getDynamicThemeClass('text-secondary') }} />
+                  )}
+                </motion.button>
+              </>
             )}
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

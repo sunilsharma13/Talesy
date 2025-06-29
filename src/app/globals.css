@@ -2,22 +2,73 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Root light and dark mode colors using CSS variables */
+/* Root variables (Default to Light Theme or a neutral base if you prefer) */
+/* These are the base colors used if no data-theme is set, or for the 'light' theme */
 :root {
-  --background: #1e1e2f;
-  --foreground: #ffffff;
+  --background-primary: #ffffff; /* Main background */
+  --background-secondary: #f9fafb; /* Lighter background for cards, dropdowns */
+  --text-primary: #111827; /* Main text color (Gray 900) */
+  --text-secondary: #4b5563; /* Secondary text color (Gray 600) */
+  --border-color: #e5e7eb; /* Border color (Gray 200) */
+  --accent-color: #6366f1; /* Primary accent color (e.g., Indigo 500) */
+  --hover-bg: #f3f4f6; /* Background for hover states (Gray 100) */
+  --active-bg: #e0e7ff; /* Background for active states (Indigo 100) */
+  --red-color: #dc2626; /* Red color for alerts/sign out (Red 600) */
+
+  /* Input specific variables - Using existing border-color for input borders */
+  --input-background: #ffffff;
+  --input-border: var(--border-color); /* Input border uses the general border color */
+  --input-focus-ring: var(--accent-color); /* Input focus ring uses the accent color */
+
+
+  /* Your existing font variables - I'll keep them */
   --font-geist-sans: 'Inter', sans-serif;
   --font-geist-mono: 'Fira Code', monospace;
 }
 
-.dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+/* Dark Theme overrides for html[data-theme="dark"] */
+/* This theme will activate when html[data-theme="dark"] is set by the Navbar */
+html[data-theme="dark"] {
+  --background-primary: #0e0e2c; /* Deep dark blue */
+  --background-secondary: #1a1a3a; /* Slightly lighter dark blue for cards, etc. */
+  --text-primary: #e0e7ff; /* Light indigo for main text */
+  --text-secondary: #9ca3af; /* Gray 400 for secondary text */
+  --border-color: #374151; /* Gray 700 for borders */
+  --accent-color: #818cf8; /* Indigo 400 for accents */
+  --hover-bg: #374151; /* Gray 700 for hover */
+  --active-bg: #4338ca; /* Indigo 800 for active state */
+  --red-color: #fca5a5; /* Red 300 */
+
+  /* Input specific variables for dark theme */
+  --input-background: rgba(40, 40, 40, 0.7); /* Slightly transparent dark for inputs */
+  --input-border: var(--border-color); /* Uses dark theme border color */
+  --input-focus-ring: var(--accent-color); /* Uses dark theme accent color */
 }
 
+/* Talesy Accent Theme overrides for html[data-theme="talesy-accent"] */
+/* This theme will activate when html[data-theme="talesy-accent"] is set */
+/* IMPORTANT: Adjust these colors to match your "write/new page" aesthetic! */
+html[data-theme="talesy-accent"] {
+  --background-primary: #1e0b38; /* A deep purple-ish dark */
+  --background-secondary: #311559; /* Lighter purple-ish dark */
+  --text-primary: #f0e6fa; /* Off-white / light purple text */
+  --text-secondary: #c298db; /* Muted purple for secondary text */
+  --border-color: #5a2e8c; /* Darker purple border */
+  --accent-color: #facc15; /* Talesy yellow! (e.g., amber-500) - THIS IS THE ONE YOU MIGHT WANT TO CHANGE THE MOST */
+  --hover-bg: #4f2382; /* Darker purple hover */
+  --active-bg: #6c2bc4; /* Brighter purple active */
+  --red-color: #ff6347; /* Tomato red, or adjust as needed */
+
+  /* Input specific variables for talesy-accent theme */
+  --input-background: rgba(49, 21, 89, 0.7); /* Slightly transparent purple for inputs */
+  --input-border: var(--border-color); /* Uses talesy-accent border color */
+  --input-focus-ring: var(--accent-color); /* Uses talesy-accent accent color */
+}
+
+/* Your original body and other styles */
 body {
-  background-color: var(--background);
-  color: var(--foreground);
+  background-color: var(--background-primary); /* Uses the new variable */
+  color: var(--text-primary); /* Uses the new variable */
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   transition: background-color 0.3s, color 0.3s;
 }
@@ -25,8 +76,74 @@ body {
 img {
   text-decoration: none !important;
 }
+
 [contentEditable=true]:empty:before {
   content: attr(data-placeholder);
   opacity: 0.6;
   cursor: text;
+}
+
+/* --- ADDED/MODIFIED FOR INPUT BORDERS --- */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="url"],
+input[type="tel"],
+input[type="search"],
+textarea,
+select {
+  border: 1px solid var(--input-border); /* Default border using a variable */
+  background-color: var(--input-background); /* Background using a variable */
+  color: var(--text-primary); /* Text color using primary text variable */
+  padding: 0.625rem 1rem; /* Consistent padding */
+  border-radius: 0.5rem; /* Consistent border-radius */
+  outline: none; /* Remove default browser outline */
+  transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out; /* Smooth transition */
+}
+
+/* Focus state for input fields and textareas */
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+input[type="url"]:focus,
+input[type="tel"]:focus,
+input[type="search"]:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--input-focus-ring); /* Accent color on focus */
+  box-shadow: 0 0 0 3px rgba(var(--input-focus-ring-rgb, 187, 134, 252), 0.3); /* Subtle focus ring */
+}
+
+/* Optional: Define RGB values for the accent color if you want to use rgba with it directly in CSS */
+/* You would need to add this for each theme if you use it for box-shadow with opacity */
+:root {
+    --input-focus-ring-rgb: 99, 102, 241; /* RGB for #6366f1 (light theme accent) */
+}
+html[data-theme="dark"] {
+    --input-focus-ring-rgb: 129, 140, 248; /* RGB for #818cf8 (dark theme accent) */
+}
+html[data-theme="talesy-accent"] {
+    --input-focus-ring-rgb: 250, 204, 21; /* RGB for #facc15 (talesy-accent) */
+}
+
+
+/* Optional: Custom scrollbar styling for better aesthetics in themed elements */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: var(--background-secondary);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-color);
 }

@@ -1,309 +1,90 @@
 // app/settings/page.tsx
+
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { toast } from 'react-hot-toast';
+import { useState, useEffect, useCallback } from 'react';
+import { useSession, signOut } from 'next-auth/react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useRouter } from 'next/navigation';
+import { useTheme } from '@/context/ThemeContext';
+import axios from 'axios'; // Import axios
+import toast from 'react-hot-toast'; // Import react-hot-toast
 
-// Types for email preferences
-interface EmailPreferences {
-  newFollower: boolean;
-  newComment: boolean;
-  newLike: boolean;
-  weeklyDigest: boolean;
+// --- Type Definitions ---
+interface LoginSession {
+  id: string;
+  device: string;
+  location: string;
+  lastLogin: string;
 }
 
-export default function SettingsPage() {
-  const { data: session } = useSession();
-  const router = useRouter();
-  
-  const [name, setName] = useState("");
-  const [bio, setBio] = useState("");
-  const [avatar, setAvatar] = useState("");
+// --- NEW: Notification Settings Interface ---
+interface NotificationSettings {
+  comments: boolean;
+  follows: boolean;
+  likes: boolean;
+  messages: boolean;
+}
+
+// --- NEW: Notifications Settings Component ---
+const NotificationsSettings = () => {
+  const [settings, setSettings] = useState<NotificationSettings>({
+    comments: true,
+    follows: true,
+    likes: true,
+    messages: true,
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [imageUploading, setImageUploading] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-  
-  // Email notification preferences
-  const [emailPreferences, setEmailPreferences] = useState<EmailPreferences>({
-    newFollower: true,
-    newComment: true,
-    newLike: true,
-    weeklyDigest: true,
-  });
-  
-  // Active tab
-  const [activeTab, setActiveTab] = useState<"profile" | "account" | "notifications">("profile");
+  const { data: session } = useSession();
+  const { getDynamicThemeClass } = useTheme();
 
-  // Fetch user data
   useEffect(() => {
-    if (!session) {
-      router.push("/login");
-      return;
-    }
-    
-    const fetchUserData = async () => {
+    const fetchSettings = async () => {
+      if (!session) return;
       try {
         setLoading(true);
-        
-        // First, try to get profile data
-        const res = await fetch("/api/profile");
-        console.log("Profile API Response:", res.status);
-        
-        if (!res.ok) {
-          // If profile API fails, try users/profile API
-          console.log("Trying alternative API endpoint");
-          const altRes = await fetch("/api/users/profile");
-          
-          if (!altRes.ok) {
-            throw new Error(`Failed to fetch profile: ${altRes.status}`);
-          }
-          
-          const data = await altRes.json();
-          
-          if (data.user) {
-            setName(data.user.name || "");
-            setBio(data.user.bio || "");
-            setAvatar(data.user.avatar || "");
-          }
-        } else {
-          // Use the original API response if successful
-          const data = await res.json();
-          
-          if (data.user) {
-            setName(data.user.name || "");
-            setBio(data.user.bio || "");
-            setAvatar(data.user.avatar || "");
-          }
-        }
-        
-        // Fetch notification preferences
-        try {
-          const prefRes = await fetch("/api/user/settings");
-          
-          if (prefRes.ok) {
-            const prefData = await prefRes.json();
-            if (prefData.emailPreferences) {
-              setEmailPreferences(prefData.emailPreferences);
-            }
-          }
-        } catch (prefError) {
-          console.error("Error fetching preferences:", prefError);
-          // Continue with default preferences if this fails
-        }
+        // CALL THE UNIFIED USER SETTINGS API
+        const response = await axios.get('/api/user/settings');
+        // Extract only notificationSettings from the response
+        setSettings(response.data.notificationSettings || { comments: true, follows: true, likes: true, messages: true });
       } catch (error) {
-        console.error("Failed to fetch user data:", error);
-        
-        // If the API calls fail, initialize with session data
-        if (session.user?.name) {
-          setName(session.user.name);
-        }
-        if (session.user?.image) {
-          setAvatar(session.user.image);
-        }
-        
-        toast.error("Failed to load your settings");
+        console.error('Failed to fetch notification settings:', error);
+        toast.error('Failed to load notification settings.');
       } finally {
         setLoading(false);
       }
     };
+    fetchSettings();
+  }, [session]);
+
+  const handleChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, checked } = event.target;
     
-    fetchUserData();
-  }, [session, router]);
-  
-  // Handle avatar upload
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    // Check file size (max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Image is too large. Maximum size is 2MB");
-      return;
-    }
-    
-    const formData = new FormData();
-    formData.append("file", file);
-    
-    try {
-      setImageUploading(true);
-      
-      const uploadRes = await fetch("/api/upload", {
-        method: "POST",
-        body: formData
-      });
-      
-      if (!uploadRes.ok) {
-        const errorText = await uploadRes.text();
-        throw new Error(errorText || "Failed to upload image");
-      }
-      
-      const uploadData = await uploadRes.json();
-      
-      // Accept either url or fileUrl from the response
-      const imageUrl = uploadData.url || uploadData.fileUrl;
-      
-      if (!imageUrl) {
-        throw new Error("No image URL returned from server");
-      }
-      
-      setAvatar(imageUrl);
-      toast.success("Avatar uploaded successfully");
-    } catch (error) {
-      console.error("Error uploading avatar:", error);
-      toast.error("Failed to upload avatar");
-    } finally {
-      setImageUploading(false);
-    }
-  };
-  
-  // Save profile information
-  const handleProfileSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+    // Optimistically update UI
+    setSettings(prevSettings => ({
+      ...prevSettings,
+      [name]: checked,
+    }));
+
     try {
       setSaving(true);
-      
-      // Try both endpoints for compatibility
-      let saveSuccess = false;
-      
-      try {
-        const res = await fetch("/api/profile", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            name,
-            bio,
-            avatar
-          })
-        });
-        
-        if (res.ok) {
-          saveSuccess = true;
+      // CALL THE UNIFIED USER SETTINGS API WITH ONLY THE NOTIFICATION SETTINGS
+      await axios.put('/api/user/settings', {
+        notificationSettings: {
+          ...settings, // Current state of all notification settings
+          [name]: checked, // Override the one that changed
         }
-      } catch (error) {
-        console.error("Error with first profile endpoint:", error);
-      }
-      
-      // If the first endpoint failed, try the alternative
-      if (!saveSuccess) {
-        const altRes = await fetch("/api/users/profile/update", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            name,
-            bio,
-            avatar
-          })
-        });
-        
-        if (!altRes.ok) {
-          throw new Error("Failed to update profile");
-        }
-        
-        saveSuccess = true;
-      }
-      
-      if (saveSuccess) {
-        // Notify UI of profile update
-        window.dispatchEvent(
-          new CustomEvent("profileUpdated", { detail: { name, avatar } })
-        );
-        
-        toast.success("Profile updated successfully");
-      } else {
-        throw new Error("Failed to update profile");
-      }
-    } catch (error) {
-      console.error("Error updating profile:", error);
-      toast.error("Failed to update profile");
-    } finally {
-      setSaving(false);
-    }
-  };
-  
-  // Change password
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPasswordError("");
-    
-    if (newPassword !== confirmPassword) {
-      setPasswordError("Passwords do not match");
-      return;
-    }
-    
-    if (newPassword.length < 8) {
-      setPasswordError("Password must be at least 8 characters");
-      return;
-    }
-    
-    try {
-      setSaving(true);
-      
-      const res = await fetch("/api/auth/change-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          currentPassword,
-          newPassword
-        })
       });
-      
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Failed to change password");
-      }
-      
-      // Reset password fields
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      
-      toast.success("Password changed successfully");
-    } catch (error: any) {
-      console.error("Error changing password:", error);
-      setPasswordError(error.message || "Failed to change password");
-    } finally {
-      setSaving(false);
-    }
-  };
-  
-  // Save notification preferences
-  const handleNotificationSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    try {
-      setSaving(true);
-      
-      const res = await fetch("/api/user/settings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          emailPreferences
-        })
-      });
-      
-      if (!res.ok) {
-        throw new Error("Failed to update notification preferences");
-      }
-      
-      toast.success("Notification settings updated successfully");
+      toast.success('Notification settings updated!');
     } catch (error) {
-      console.error("Error updating notification settings:", error);
-      toast.error("Failed to update notification settings");
+      console.error('Failed to update notification settings:', error);
+      toast.error('Failed to save settings. Please try again.');
+      // Revert UI on error
+      setSettings(prevSettings => ({
+        ...prevSettings,
+        [name]: !checked,
+      }));
     } finally {
       setSaving(false);
     }
@@ -311,370 +92,559 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-3xl mx-auto p-6 animate-pulse">
-        <div className="h-8 bg-gray-700 rounded w-1/4 mb-8"></div>
-        <div className="h-10 bg-gray-700 rounded w-full mb-6"></div>
-        <div className="h-32 bg-gray-700 rounded w-full mb-6"></div>
-        <div className="h-12 bg-gray-700 rounded w-1/3"></div>
+      <div className={`p-6 rounded-xl`} style={{ backgroundColor: getDynamicThemeClass('background-secondary'), border: `1px solid ${getDynamicThemeClass('border-color')}` }}>
+        <p style={{ color: getDynamicThemeClass('text-primary') }}>Loading notification settings...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
-      <h1 className="text-3xl font-bold text-white mb-8">Settings</h1>
-      
-      {/* Tabs */}
-      <div className="mb-8 border-b border-gray-700">
-        <div className="flex flex-wrap -mb-px">
-          <button
-            onClick={() => setActiveTab("profile")}
-            className={`mr-4 py-2 px-1 font-medium text-sm border-b-2 transition-colors ${
-              activeTab === "profile"
-                ? "border-indigo-500 text-indigo-400"
-                : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300"
-            }`}
-          >
-            Profile
-          </button>
-          
+    <div className={`p-6 rounded-xl`} style={{ backgroundColor: getDynamicThemeClass('background-secondary'), border: `1px solid ${getDynamicThemeClass('border-color')}` }}>
+      <h2 className="text-lg font-medium mb-6" style={{ color: getDynamicThemeClass('text-primary') }}>Notification Preferences</h2>
+
+      <div className="space-y-6">
+        {/* Comment Notifications */}
+        <div className="flex items-center justify-between">
+          <label htmlFor="comments" className="text-base font-medium cursor-pointer" style={{ color: getDynamicThemeClass('text-secondary') }}>
+            Comments on my posts
+          </label>
+          <input
+            type="checkbox"
+            id="comments"
+            name="comments"
+            checked={settings.comments}
+            onChange={handleChange}
+            disabled={saving}
+            className="h-5 w-5 rounded focus:ring-2"
+            style={{
+              backgroundColor: getDynamicThemeClass('input-background'),
+              border: `1px solid ${getDynamicThemeClass('input-border')}`,
+              accentColor: getDynamicThemeClass('accent-color'),
+            } as React.CSSProperties}
+          />
+        </div>
+
+        {/* Follow Notifications */}
+        <div className="flex items-center justify-between">
+          <label htmlFor="follows" className="text-base font-medium cursor-pointer" style={{ color: getDynamicThemeClass('text-secondary') }}>
+            New followers
+          </label>
+          <input
+            type="checkbox"
+            id="follows"
+            name="follows"
+            checked={settings.follows}
+            onChange={handleChange}
+            disabled={saving}
+            className="h-5 w-5 rounded focus:ring-2"
+            style={{
+              backgroundColor: getDynamicThemeClass('input-background'),
+              border: `1px solid ${getDynamicThemeClass('input-border')}`,
+              accentColor: getDynamicThemeClass('accent-color'),
+            } as React.CSSProperties}
+          />
+        </div>
+
+        {/* Like Notifications */}
+        <div className="flex items-center justify-between">
+          <label htmlFor="likes" className="text-base font-medium cursor-pointer" style={{ color: getDynamicThemeClass('text-secondary') }}>
+            Likes on my content
+          </label>
+          <input
+            type="checkbox"
+            id="likes"
+            name="likes"
+            checked={settings.likes}
+            onChange={handleChange}
+            disabled={saving}
+            className="h-5 w-5 rounded focus:ring-2"
+            style={{
+              backgroundColor: getDynamicThemeClass('input-background'),
+              border: `1px solid ${getDynamicThemeClass('input-border')}`,
+              accentColor: getDynamicThemeClass('accent-color'),
+            } as React.CSSProperties}
+          />
+        </div>
+
+        {/* Messages Notifications */}
+        <div className="flex items-center justify-between">
+          <label htmlFor="messages" className="text-base font-medium cursor-pointer" style={{ color: getDynamicThemeClass('text-secondary') }}>
+            Direct messages
+          </label>
+          <input
+            type="checkbox"
+            id="messages"
+            name="messages"
+            checked={settings.messages}
+            onChange={handleChange}
+            disabled={saving}
+            className="h-5 w-5 rounded focus:ring-2"
+            style={{
+              backgroundColor: getDynamicThemeClass('input-background'),
+              border: `1px solid ${getDynamicThemeClass('input-border')}`,
+              accentColor: getDynamicThemeClass('accent-color'),
+            } as React.CSSProperties}
+          />
+        </div>
+
+        <p className="text-sm mt-8" style={{ color: getDynamicThemeClass('text-secondary-faded') }}>
+          Changes are saved automatically.
+          {saving && <span className="ml-2 text-[var(--accent-color)]">Saving...</span>}
+        </p>
+      </div>
+    </div>
+  );
+};
+
+
+// --- Main Settings Page Component ---
+export default function SettingsPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const { theme, getDynamicThemeClass } = useTheme();
+
+  const [activeTab, setActiveTab] = useState("account");
+
+  // These states are no longer directly used for profile editing on this page,
+  // but kept as they might be used elsewhere or for initialization.
+  const [profileName, setProfileName] = useState('');
+  const [profileBio, setProfileBio] = useState('');
+  const [profileAvatar, setProfileAvatar] = useState('');
+
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  const [saving, setSaving] = useState(false);
+  const [showDeactivationConfirm, setShowDeactivationConfirm] = useState(false);
+  const [loginSessions, setLoginSessions] = useState<LoginSession[]>([]);
+
+  useEffect(() => {
+    if (status === "loading") return;
+
+    if (!session) {
+      router.push('/login');
+    } else {
+      // You might still fetch and set these if you want to display them
+      // as read-only info, or if you plan to move profile editing elsewhere.
+      setProfileName(session.user.name || '');
+      setProfileBio(session.user.bio || '');
+      setProfileAvatar(session.user.image || session.user.avatar || '');
+    }
+    setLoginSessions([
+      { id: '1', device: 'Chrome on Windows', location: 'Jaipur, India', lastLogin: new Date().toISOString() },
+      { id: '2', device: 'Safari on iPhone', location: 'Delhi, India', lastLogin: new Date(Date.now() - 86400000).toISOString() },
+    ]);
+
+  }, [session, status, router]);
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setSaving(true);
+
+    if (newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters long.");
+      setSaving(false);
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New password and confirm password do not match.");
+      setSaving(false);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/auth/change-current-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldPassword: currentPassword, newPassword: newPassword }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('API Error during password change:', response.status, data.message);
+        toast.error(data.message || 'Failed to change password. Please try again.');
+        setPasswordError(data.message || 'Failed to change password. Please try again.');
+      } else {
+        console.log('Password updated successfully:', data.message);
+        toast.success('Password updated successfully!');
+        setPasswordError('Password updated successfully!'); // Optional: Display success message in error div
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+    } catch (error: any) {
+      console.error('Client-side network error changing password:', error);
+      toast.error('An unexpected error occurred. Please try again later.');
+      setPasswordError('An unexpected error occurred. Please try again later.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleForgotPassword = useCallback(() => {
+    toast('Forgot password functionality will be implemented soon!');
+  }, []);
+
+  const handleDeactivateAccount = async () => {
+    setSaving(true);
+    try {
+      const response = await fetch('/api/user/deactivate', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('Deactivation API Error:', data.message);
+        toast.error(`Failed to deactivate account: ${data.message}`);
+      } else {
+        console.log('Account deactivated successfully:', data.message);
+        toast.success(data.message);
+        await signOut({ callbackUrl: '/' });
+      }
+    } catch (error) {
+      console.error('Client-side error during deactivation:', error);
+      toast.error('An unexpected error occurred during deactivation. Please try again.');
+    } finally {
+      setSaving(false);
+      setShowDeactivationConfirm(false);
+    }
+  };
+
+  const handleLogoutAllDevices = async () => {
+    setSaving(true);
+    try {
+      const response = await fetch('/api/auth/logout-all', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('Logout All API Error:', data.message);
+        toast.error(`Failed to log out from all devices: ${data.message}`);
+      } else {
+        console.log('Logged out from all devices successfully:', data.message);
+        toast.success(data.message);
+        await signOut({ callbackUrl: '/' });
+      }
+    } catch (error) {
+      console.error('Client-side error during logout-all:', error);
+      toast.error('An unexpected error occurred. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case "account":
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="lg:col-span-1">
+              <div className={`p-6 rounded-xl mb-8`} style={{ backgroundColor: getDynamicThemeClass('background-secondary'), border: `1px solid ${getDynamicThemeClass('border-color')}` }}>
+                <h2 className="text-lg font-medium mb-6" style={{ color: getDynamicThemeClass('text-primary') }}>Change Password</h2>
+                <form onSubmit={handlePasswordChange}>
+                  <div className="mb-4">
+                    <label htmlFor="currentPassword" className="block text-sm font-medium mb-2" style={{ color: getDynamicThemeClass('text-secondary') }}>
+                      Current Password
+                    </label>
+                    <input
+                      type="password"
+                      id="currentPassword"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2"
+                      style={{
+                        backgroundColor: getDynamicThemeClass('input-background'),
+                        border: `1px solid ${getDynamicThemeClass('input-border')}`,
+                        color: getDynamicThemeClass('text-primary'),
+                        '--tw-ring-color': getDynamicThemeClass('accent-color'),
+                      } as React.CSSProperties}
+                      required
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label htmlFor="newPassword" className="block text-sm font-medium mb-2" style={{ color: getDynamicThemeClass('text-secondary') }}>
+                      New Password
+                    </label>
+                    <input
+                      type="password"
+                      id="newPassword"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2"
+                      style={{
+                        backgroundColor: getDynamicThemeClass('input-background'),
+                        border: `1px solid ${getDynamicThemeClass('input-border')}`,
+                        color: getDynamicThemeClass('text-primary'),
+                        '--tw-ring-color': getDynamicThemeClass('accent-color'),
+                      } as React.CSSProperties}
+                      required
+                      minLength={8}
+                    />
+                    <p className="text-xs mt-1" style={{ color: getDynamicThemeClass('text-secondary-faded') }}>
+                      Password must be at least 8 characters
+                    </p>
+                  </div>
+                  <div className="mb-4">
+                    <label htmlFor="confirmPassword" className="block text-sm font-medium mb-2" style={{ color: getDynamicThemeClass('text-secondary') }}>
+                      Confirm New Password
+                    </label>
+                    <input
+                      type="password"
+                      id="confirmPassword"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2"
+                      style={{
+                        backgroundColor: getDynamicThemeClass('input-background'),
+                        border: `1px solid ${getDynamicThemeClass('input-border')}`,
+                        color: getDynamicThemeClass('text-primary'),
+                        '--tw-ring-color': getDynamicThemeClass('accent-color'),
+                      } as React.CSSProperties}
+                      required
+                    />
+                  </div>
+                  <AnimatePresence>
+                    {passwordError && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="mb-4 p-3 rounded-lg text-sm"
+                        style={{ backgroundColor: getDynamicThemeClass('error-background'), color: getDynamicThemeClass('error-color'), border: `1px solid ${getDynamicThemeClass('error-border')}` }}
+                      >
+                        {passwordError}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <div className="mt-6 flex flex-col sm:flex-row justify-between items-center">
+                    <motion.button
+                      type="submit"
+                      disabled={saving}
+                      className="px-5 py-2.5 font-medium rounded-lg transition-colors duration-300 disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto
+                                 hover:bg-[var(--accent-color-hover)]"
+                      style={{
+                        backgroundColor: getDynamicThemeClass('accent-color'),
+                        color: getDynamicThemeClass('active-text'),
+                        boxShadow: `0 4px 10px ${getDynamicThemeClass('shadow-color-subtle')}`,
+                      } as React.CSSProperties}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      {saving ? 'Updating...' : 'Update Password'}
+                    </motion.button>
+                    <button
+                      type="button"
+                      onClick={handleForgotPassword}
+                      className="mt-4 sm:mt-0 text-sm font-medium transition-colors duration-200 underline
+                      text-[color:var(--accent-color)] hover:text-[color:var(--accent-color-hover)]"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div className={`p-6 rounded-xl`} style={{ backgroundColor: getDynamicThemeClass('background-secondary'), border: `1px solid ${getDynamicThemeClass('border-color')}` }}>
+                <h2 className="text-lg font-medium mb-4" style={{ color: getDynamicThemeClass('text-primary') }}>Account Information</h2>
+                <div className="mt-4">
+                  <p className="text-sm mb-1" style={{ color: getDynamicThemeClass('text-secondary') }}>Email</p>
+                  <p className="font-medium" style={{ color: getDynamicThemeClass('text-primary') }}>{session?.user?.email || 'N/A'}</p>
+                </div>
+                <div className="mt-8">
+                  <h3 className="text-sm font-medium mb-4" style={{ color: getDynamicThemeClass('error-color') }}>Danger Zone</h3>
+                  <motion.button
+                    type="button"
+                    className="px-4 py-2 font-medium rounded-lg transition-colors duration-300 disabled:opacity-70 disabled:cursor-not-allowed
+                                 hover:bg-[var(--danger-button-hover-bg)]"
+                    style={{
+                      backgroundColor: getDynamicThemeClass('danger-button-bg'),
+                      border: `1px solid ${getDynamicThemeClass('danger-button-border')}`,
+                      color: getDynamicThemeClass('danger-button-text'),
+                    }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setShowDeactivationConfirm(true)}
+                    disabled={saving}
+                  >
+                    Deactivate Account
+                  </motion.button>
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-1">
+              <div className={`p-6 rounded-xl`} style={{ backgroundColor: getDynamicThemeClass('background-secondary'), border: `1px solid ${getDynamicThemeClass('border-color')}` }}>
+                <h2 className="text-lg font-medium mb-6" style={{ color: getDynamicThemeClass('text-primary') }}>Login Activity</h2>
+                {loginSessions.length > 0 ? (
+                  <div className="space-y-4">
+                    {loginSessions.map((sessionItem) => (
+                      <div key={sessionItem.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 rounded-lg"
+                        style={{ backgroundColor: getDynamicThemeClass('input-background'), border: `1px solid ${getDynamicThemeClass('input-border')}` }}>
+                        <div>
+                          <p className="font-medium" style={{ color: getDynamicThemeClass('text-primary') }}>{sessionItem.device}</p>
+                          <p className="text-sm" style={{ color: getDynamicThemeClass('text-secondary') }}>
+                            {new Date(sessionItem.lastLogin).toLocaleString()} &bull; {sessionItem.location}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm" style={{ color: getDynamicThemeClass('text-secondary') }}>No active login sessions found.</p>
+                )}
+                <div className="mt-8">
+                  <motion.button
+                    type="button"
+                    onClick={handleLogoutAllDevices}
+                    disabled={saving}
+                    className="px-4 py-2 font-medium rounded-lg transition-colors duration-300 disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto
+                                 hover:bg-[var(--button-secondary-hover-bg)]"
+                    style={{
+                      backgroundColor: getDynamicThemeClass('button-secondary-bg'),
+                      color: getDynamicThemeClass('button-secondary-text'),
+                      border: `1px solid ${getDynamicThemeClass('button-secondary-border')}`,
+                    }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    {saving ? 'Logging out...' : 'Log out from all devices'}
+                  </motion.button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case "notifications":
+        return <NotificationsSettings />;
+
+      default:
+        return null;
+    }
+  };
+
+  if (status === "loading") {
+    return (
+      <div className="flex justify-center items-center h-screen" style={{ backgroundColor: getDynamicThemeClass('background-primary'), color: getDynamicThemeClass('text-primary') }}>
+        Loading settings...
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="flex justify-center items-center h-screen" style={{ backgroundColor: getDynamicThemeClass('background-primary'), color: getDynamicThemeClass('text-primary') }}>
+        Redirecting to login...
+      </div>
+    );
+  }
+
+  return (
+    <div className={`min-h-screen p-8`} style={{ backgroundColor: getDynamicThemeClass('background-primary'), color: getDynamicThemeClass('text-primary') }}>
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold mb-8">Settings</h1>
+
+        <nav className="mb-8 border-b" style={{ borderColor: getDynamicThemeClass('border-color') }}>
           <button
             onClick={() => setActiveTab("account")}
-            className={`mr-4 py-2 px-1 font-medium text-sm border-b-2 transition-colors ${
-              activeTab === "account"
-                ? "border-indigo-500 text-indigo-400"
-                : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300"
-            }`}
+            className={`py-3 px-6 text-sm font-medium transition-colors duration-200 border-b-2
+              ${activeTab === "account" ? 'font-semibold' : 'hover:border-[var(--accent-color-faded)]'}`}
+            style={{
+              color: activeTab === "account" ? getDynamicThemeClass('accent-color') : getDynamicThemeClass('text-secondary'),
+              borderColor: activeTab === "account" ? getDynamicThemeClass('accent-color') : 'transparent',
+            }}
           >
             Account
           </button>
-          
           <button
             onClick={() => setActiveTab("notifications")}
-            className={`py-2 px-1 font-medium text-sm border-b-2 transition-colors ${
-              activeTab === "notifications"
-                ? "border-indigo-500 text-indigo-400"
-                : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300"
-            }`}
+            className={`py-3 px-6 text-sm font-medium transition-colors duration-200 border-b-2
+              ${activeTab === "notifications" ? 'font-semibold' : 'hover:border-[var(--accent-color-faded)]'}`}
+            style={{
+              color: activeTab === "notifications" ? getDynamicThemeClass('accent-color') : getDynamicThemeClass('text-secondary'),
+              borderColor: activeTab === "notifications" ? getDynamicThemeClass('accent-color') : 'transparent',
+            }}
           >
             Notifications
           </button>
-        </div>
-      </div>
-      
-      {/* Profile Settings Tab */}
-      {activeTab === "profile" && (
-        <form onSubmit={handleProfileSave}>
-          {/* Avatar */}
-          <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-400 mb-2">
-              Profile Picture
-            </label>
-            <div className="flex items-center gap-6">
-              <div className="relative">
-                <img
-                  src={avatar || "/default-avatar.png"}
-                  alt="Avatar"
-                  className="w-20 h-20 rounded-full object-cover border border-gray-700"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = "/default-avatar.png";
-                  }}
-                />
-                {imageUploading && (
-                  <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
-                    <div className="w-5 h-5 border-2 border-t-transparent border-white rounded-full animate-spin"></div>
-                  </div>
-                )}
-              </div>
-              
-              <div>
-                <label className="block px-4 py-2 bg-indigo-600 text-white rounded-lg cursor-pointer hover:bg-indigo-700 transition-colors">
-                  <span>Upload Photo</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleAvatarUpload}
-                    disabled={imageUploading}
-                  />
-                </label>
-                <p className="text-xs text-gray-500 mt-1">
-                  JPEG, PNG or GIF. Max 2MB.
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          {/* Name */}
-          <div className="mb-6">
-            <label htmlFor="name" className="block text-sm font-medium text-gray-400 mb-2">
-              Display Name
-            </label>
-            <input
-              type="text"
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              required
-            />
-          </div>
-          
-          {/* Bio */}
-          <div className="mb-6">
-            <label htmlFor="bio" className="block text-sm font-medium text-gray-400 mb-2">
-              Bio
-            </label>
-            <textarea
-              id="bio"
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              placeholder="Tell us about yourself..."
-              className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[120px]"
-              maxLength={250}
-            ></textarea>
-            <p className="text-xs text-gray-500 text-right mt-1">
-              {bio.length}/250 characters
-            </p>
-          </div>
-          
-          {/* Save Button */}
-          <div className="mt-8">
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors duration-300 disabled:bg-indigo-800 disabled:opacity-70"
+        </nav>
+
+        {renderTabContent()}
+
+        <AnimatePresence>
+          {showDeactivationConfirm && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+              onClick={() => setShowDeactivationConfirm(false)}
             >
-              {saving ? 'Saving...' : 'Save Profile'}
-            </button>
-          </div>
-        </form>
-      )}
-      
-      {/* The rest of the component remains unchanged */}
-      {/* Account Settings Tab */}
-      {activeTab === "account" && (
-        <div>
-          <div className="p-6 bg-gray-800 border border-gray-700 rounded-xl mb-8">
-            <h2 className="text-lg font-medium text-white mb-6">Change Password</h2>
-            
-            <form onSubmit={handlePasswordChange}>
-              {/* Current Password */}
-              <div className="mb-4">
-                <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-400 mb-2">
-                  Current Password
-                </label>
-                <input
-                  type="password"
-                  id="currentPassword"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  required
-                />
-              </div>
-              
-              {/* New Password */}
-              <div className="mb-4">
-                <label htmlFor="newPassword" className="block text-sm font-medium text-gray-400 mb-2">
-                  New Password
-                </label>
-                <input
-                  type="password"
-                  id="newPassword"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  required
-                  minLength={8}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Password must be at least 8 characters
-                </p>
-              </div>
-              
-              {/* Confirm New Password */}
-              <div className="mb-4">
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-400 mb-2">
-                  Confirm New Password
-                </label>
-                <input
-                  type="password"
-                  id="confirmPassword"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  required
-                />
-              </div>
-              
-              {/* Error Message */}
-              {passwordError && (
-                <div className="mb-4 p-3 bg-red-900/20 border border-red-800 rounded-lg text-red-400 text-sm">
-                  {passwordError}
-                </div>
-              )}
-              
-              {/* Save Button */}
-              <div className="mt-6">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors duration-300 disabled:bg-indigo-800 disabled:opacity-70"
-                >
-                  {saving ? 'Updating...' : 'Update Password'}
-                </button>
-              </div>
-            </form>
-          </div>
-          
-          <div className="p-6 bg-gray-800 border border-gray-700 rounded-xl">
-            <h2 className="text-lg font-medium text-white">Account Information</h2>
-            
-            <div className="mt-4">
-              <p className="text-sm text-gray-400">Email</p>
-              <p className="text-white mt-1">{session?.user?.email || 'No email'}</p>
-            </div>
-            
-            <div className="mt-8">
-              <h3 className="text-red-500 text-sm font-medium mb-4">Danger Zone</h3>
-              <button
-                type="button"
-                className="px-4 py-2 bg-gray-700 border border-red-500 text-red-500 font-medium rounded-lg hover:bg-red-900/20 transition-colors duration-300"
-                onClick={() => {
-                  if (confirm('Are you sure you want to deactivate your account? This cannot be undone.')) {
-                    toast.error('Account deactivation is not implemented yet');
-                  }
+              <motion.div
+                initial={{ y: -50, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 50, opacity: 0 }}
+                className="bg-[var(--background-secondary)] rounded-lg p-6 shadow-xl max-w-sm w-full relative"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  backgroundColor: getDynamicThemeClass('background-secondary'),
+                  color: getDynamicThemeClass('text-primary'),
                 }}
               >
-                Deactivate Account
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Notification Settings Tab */}
-      {activeTab === "notifications" && (
-        <form onSubmit={handleNotificationSave}>
-          <div className="p-6 bg-gray-800 border border-gray-700 rounded-xl">
-            <h2 className="text-lg font-medium text-white mb-6">Email Notifications</h2>
-            
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-white font-medium">New Followers</h3>
-                  <p className="text-sm text-gray-400">
-                    Receive an email when someone follows you
-                  </p>
+                <h3 className="text-xl font-semibold mb-4">Deactivate Account</h3>
+                <p className="text-[var(--text-secondary)] mb-6">
+                  Are you sure you want to deactivate your account? This action cannot be undone.
+                </p>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => setShowDeactivationConfirm(false)}
+                    disabled={saving}
+                    className="px-4 py-2 font-medium rounded-lg transition-colors duration-300 disabled:opacity-70 disabled:cursor-not-allowed
+                                bg-[var(--button-secondary-bg)] text-[var(--button-secondary-text)] border-[1px] border-[var(--button-secondary-border)]
+                                hover:bg-[var(--button-secondary-hover-bg)]"
+                    style={{
+                      backgroundColor: getDynamicThemeClass('button-secondary-bg'),
+                      color: getDynamicThemeClass('button-secondary-text'),
+                      border: `1px solid ${getDynamicThemeClass('button-secondary-border')}`,
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeactivateAccount}
+                    disabled={saving}
+                    className="px-4 py-2 font-medium rounded-lg transition-colors duration-300 disabled:opacity-70 disabled:cursor-not-allowed
+                                bg-[var(--danger-button-bg)] text-[var(--danger-button-text)] border-[1px] border-[var(--danger-button-border)]
+                                hover:bg-[var(--danger-button-hover-bg)]"
+                    style={{
+                      backgroundColor: getDynamicThemeClass('danger-button-bg'),
+                      color: getDynamicThemeClass('danger-button-text'),
+                      border: `1px solid ${getDynamicThemeClass('danger-button-border')}`,
+                    }}
+                  >
+                    {saving ? 'Deactivating...' : 'Deactivate'}
+                  </button>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={emailPreferences.newFollower}
-                    onChange={() => setEmailPreferences({ 
-                      ...emailPreferences, 
-                      newFollower: !emailPreferences.newFollower 
-                    })}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer 
-                    peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] 
-                    after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 
-                    after:border after:rounded-full after:h-5 after:w-5 after:transition-all 
-                    peer-checked:bg-indigo-600"></div>
-                </label>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-white font-medium">New Comments</h3>
-                  <p className="text-sm text-gray-400">
-                    Receive an email when someone comments on your story
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={emailPreferences.newComment}
-                    onChange={() => setEmailPreferences({ 
-                      ...emailPreferences, 
-                      newComment: !emailPreferences.newComment 
-                    })}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer 
-                    peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] 
-                    after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 
-                    after:border after:rounded-full after:h-5 after:w-5 after:transition-all 
-                    peer-checked:bg-indigo-600"></div>
-                </label>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-white font-medium">New Likes</h3>
-                  <p className="text-sm text-gray-400">
-                    Receive an email when someone likes your story
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={emailPreferences.newLike}
-                    onChange={() => setEmailPreferences({ 
-                      ...emailPreferences, 
-                      newLike: !emailPreferences.newLike 
-                    })}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer 
-                    peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] 
-                    after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 
-                    after:border after:rounded-full after:h-5 after:w-5 after:transition-all 
-                    peer-checked:bg-indigo-600"></div>
-                </label>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-white font-medium">Weekly Digest</h3>
-                  <p className="text-sm text-gray-400">
-                    Receive a weekly summary of your story interactions
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={emailPreferences.weeklyDigest}
-                    onChange={() => setEmailPreferences({ 
-                      ...emailPreferences, 
-                      weeklyDigest: !emailPreferences.weeklyDigest 
-                    })}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer 
-                    peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] 
-                    after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 
-                    after:border after:rounded-full after:h-5 after:w-5 after:transition-all 
-                    peer-checked:bg-indigo-600"></div>
-                </label>
-              </div>
-            </div>
-            
-            <div className="mt-8">
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors duration-300 disabled:bg-indigo-800 disabled:opacity-70"
-              >
-                {saving ? 'Saving...' : 'Save Preferences'}
-              </button>
-            </div>
-          </div>
-        </form>
-      )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+      </div>
     </div>
   );
 }

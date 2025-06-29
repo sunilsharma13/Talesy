@@ -19,19 +19,19 @@ module.exports = {
       },
       animation: {
         // Existing animations:
-        "fade-in": "fadeIn 0.8s ease-out forwards", // Your existing fade-in, which includes translateY
+        "fade-in": "fadeIn 0.8s ease-out forwards",
         "pulse-fast": "pulse 6s linear infinite",
         "float": "float 10s ease-in-out infinite",
         "bounce-slow": "bounceSlow 3s ease-in-out infinite",
 
         // New animations added for LoginPage.tsx effects:
-        "fade-in-up": "fadeIn 1s ease-out forwards", // Using your existing fadeIn keyframe for this effect
+        "fade-in-up": "fadeIn 1s ease-out forwards",
         "text-pop": "textPop 0.8s ease-out forwards",
         "bounce-once": "bounceOnce 1.5s ease-out 0.8s 1 forwards",
       },
       keyframes: {
         // Your existing keyframes:
-        fadeIn: { // Note: This includes a translateY effect
+        fadeIn: {
           "0%": { opacity: 0, transform: "translateY(20px)" },
           "100%": { opacity: 1, transform: "translateY(0)" },
         },
@@ -44,11 +44,6 @@ module.exports = {
           "0%, 100%": { transform: "translateY(0)" },
           "50%": { transform: "translateY(-6px)" },
         },
-        // Standard Tailwind 'pulse' keyframe is implicitly available, but if 'pulse-fast' needs a custom one:
-        // pulse: { // Only add if you want to override Tailwind's default 'pulse' for 'pulse-fast'
-        //   '0%, 100%': { opacity: 1 },
-        //   '50%': { opacity: .5 },
-        // },
 
         // New keyframes for LoginPage.tsx effects:
         textPop: {
@@ -64,5 +59,8 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/typography'),
+    // require('@tailwindcss/line-clamp'),
+  ],
 };

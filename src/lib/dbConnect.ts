@@ -2,6 +2,16 @@
 import mongoose from 'mongoose';
 import { Db, MongoClient } from 'mongodb';
 
+// IMPORTS FOR YOUR MODELS:
+// Make sure these paths are correct relative to dbConnect.ts
+// Assuming dbConnect.ts is in src/lib and models are in src/models
+import '@/models/post';    // Corrected path if models are directly in src/models
+import '@/models/writing'; // Assuming you have a Writing model if not covered by Post
+import '@/models/user';     // Import your User model
+import '@/models/comment';
+import '@/models/commentLike';
+import '@/models/notification'; // <--- NEW: Added import for Notification model here
+
 const MONGODB_URI = process.env.MONGODB_URI as string;
 
 if (!MONGODB_URI) {
@@ -22,6 +32,11 @@ async function dbConnect(): Promise<{ conn: typeof mongoose; db: Db }> {
 
   if (!cached.promise) {
     console.log('Attempting to connect to MongoDB...');
+    
+    // <--- NEW: Added this line to suppress strictQuery warning and ensure consistent behavior
+    mongoose.set('strictQuery', true); 
+    // -----------------------------------------------------------------------------------
+
     cached.promise = mongoose.connect(MONGODB_URI, {
       bufferCommands: false,
     }).then((m) => {

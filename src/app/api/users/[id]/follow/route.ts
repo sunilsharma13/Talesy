@@ -1,13 +1,13 @@
 // app/api/users/[id]/follow/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getMongoClient } from '@/lib/dbConnect'; // <--- Change here
-import { ObjectId } from 'mongodb';
+import { getMongoClient } from '@/lib/dbConnect';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { sendTemplateEmail } from '@/lib/email';
+import { toObjectId } from '@/lib/utils/objectIdConverter'; // <--- NEW IMPORT
 
 interface User {
-  _id: string | ObjectId;
+  _id: string | import('mongodb').ObjectId; // Use import to avoid direct ObjectId import
   name?: string;
   email?: string;
   emailPreferences?: {
@@ -19,13 +19,7 @@ interface User {
   avatar?: string;
 }
 
-function toObjectId(id: string | ObjectId) {
-  if (typeof id === 'string' && ObjectId.isValid(id)) return new ObjectId(id);
-  if (id instanceof ObjectId) return id;
-  throw new Error('Invalid ObjectId');
-}
-
-export async function GET(req: NextRequest) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) { // Use params
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -33,56 +27,58 @@ export async function GET(req: NextRequest) {
     }
 
     const currentUserId = session.user.id;
+    const userToCheckId = params.id; // Use params.id directly
 
-    // Extract userToCheckId from URL using params for cleaner access
-    const url = new URL(req.url);
-    const pathSegments = url.pathname.split('/');
-    const userToCheckId = pathSegments[3]; // Assumes URL structure /api/users/[id]/follow
-
-    if (!userToCheckId || userToCheckId === currentUserId) {
-      return NextResponse.json({ following: false, followers: 0, followingCount: 0 });
+    if (!userToCheckId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
-    // Convert IDs to ObjectId if they are strings for consistency in database queries
+    // Convert to ObjectId and handle potential invalid IDs
     const currentUserIdObj = toObjectId(currentUserId);
     const userToCheckIdObj = toObjectId(userToCheckId);
 
-    const client = await getMongoClient(); // <--- Change here
+    if (!currentUserIdObj || !userToCheckIdObj) {
+      return NextResponse.json({ error: 'Invalid User ID format' }, { status: 400 });
+    }
+
+    if (userToCheckId === currentUserId) { // Cannot check self-follow status in this context meaningfully
+      return NextResponse.json({ isFollowing: false, followers: 0, followingCount: 0 }); // Added followingCount
+    }
+
+    const client = await getMongoClient();
     const db = client.db('talesy');
     const followCollection = db.collection('follows');
 
     const followRecord = await followCollection.findOne({
-      followerId: currentUserIdObj, // Use ObjectId
-      followingId: userToCheckIdObj, // Use ObjectId
+      followerId: currentUserIdObj,
+      followingId: userToCheckIdObj,
     });
 
-    // Get follower count
     const followerCount = await followCollection.countDocuments({
-      followingId: userToCheckIdObj, // Use ObjectId
+      followingId: userToCheckIdObj,
     });
 
-    // Get following count
-    const followingCount = await followCollection.countDocuments({
-      followerId: userToCheckIdObj, // Use ObjectId (to count how many *this user* is following)
+    const currentUsersFollowingCount = await followCollection.countDocuments({
+      followerId: currentUserIdObj,
     });
 
-    return NextResponse.json({ 
-      following: !!followRecord,
+    return NextResponse.json({
+      isFollowing: !!followRecord,
       followers: followerCount,
-      followingCount: followingCount
+      followingCount: currentUsersFollowingCount, // Include this here
     });
   } catch (error) {
     console.error('Follow check error:', error);
-    return NextResponse.json({ 
-      error: 'Server error', 
-      following: false, 
-      followers: 0, 
-      followingCount: 0 
+    return NextResponse.json({
+      error: 'Server error',
+      isFollowing: false,
+      followers: 0,
+      followingCount: 0
     }, { status: 500 });
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) { // Use params
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -90,24 +86,28 @@ export async function POST(req: NextRequest) {
     }
 
     const currentUserId = session.user.id;
+    const userToFollowId = params.id; // Use params.id directly
 
-    // Extract userToFollowId from URL: /api/users/[id]/follow
-    const url = new URL(req.url);
-    const pathSegments = url.pathname.split('/');
-    const userToFollowId = pathSegments[3]; // Assumes URL structure /api/users/[id]/follow
-
-    if (!userToFollowId || userToFollowId === currentUserId) {
-      return NextResponse.json({ error: 'Invalid user to follow' }, { status: 400 });
+    if (!userToFollowId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
-    const client = await getMongoClient(); // <--- Change here
+    // Convert to ObjectId and handle potential invalid IDs
+    const currentUserIdObj = toObjectId(currentUserId);
+    const userToFollowIdObj = toObjectId(userToFollowId);
+
+    if (!currentUserIdObj || !userToFollowIdObj) {
+      return NextResponse.json({ error: 'Invalid User ID format' }, { status: 400 });
+    }
+
+    if (userToFollowId === currentUserId) {
+      return NextResponse.json({ error: 'Cannot follow/unfollow self' }, { status: 400 });
+    }
+
+    const client = await getMongoClient();
     const db = client.db('talesy');
     const userCollection = db.collection<User>('users');
     const followCollection = db.collection('follows');
-
-    // Convert IDs to ObjectId for database operations
-    const currentUserIdObj = toObjectId(currentUserId);
-    const userToFollowIdObj = toObjectId(userToFollowId);
 
     const currentUser = await userCollection.findOne({ _id: currentUserIdObj });
     const userToFollow = await userCollection.findOne({ _id: userToFollowIdObj });
@@ -121,22 +121,22 @@ export async function POST(req: NextRequest) {
       followingId: userToFollowIdObj,
     });
 
-    let following = false;
-    
+    let isFollowing = false;
+
     if (alreadyFollowing) {
       await followCollection.deleteOne({
         followerId: currentUserIdObj,
         followingId: userToFollowIdObj,
       });
-      following = false;
+      isFollowing = false;
     } else {
       await followCollection.insertOne({
         followerId: currentUserIdObj,
         followingId: userToFollowIdObj,
         createdAt: new Date(),
       });
-      following = true;
-      
+      isFollowing = true;
+
       // Send email notification
       if (
         userToFollow.email &&
@@ -153,28 +153,27 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Get updated follower count
+    // Get updated counts after the operation
     const followerCount = await followCollection.countDocuments({
       followingId: userToFollowIdObj,
     });
 
-    // Get updated following count
-    const followingCount = await followCollection.countDocuments({
-      followerId: currentUserIdObj, // This should be currentUserIdObj, not userToFollowIdObj
+    const currentUsersFollowingCount = await followCollection.countDocuments({
+      followerId: currentUserIdObj,
     });
 
     return NextResponse.json({
-      following,
+      isFollowing: isFollowing,
       followers: followerCount,
-      followingCount, // Simplified
-      message: following ? 'Followed' : 'Unfollowed'
+      followingCount: currentUsersFollowingCount,
+      message: isFollowing ? 'Followed' : 'Unfollowed'
     });
   } catch (error) {
     console.error('Follow error:', error);
-    return NextResponse.json({ 
-      error: 'Server error', 
+    return NextResponse.json({
+      error: 'Server error',
       details: error instanceof Error ? error.message : 'Unknown error',
-      following: false,
+      isFollowing: false,
       followers: 0,
       followingCount: 0
     }, { status: 500 });

@@ -1,12 +1,14 @@
-// homepage/HomeClient.tsx
+// src/homepage/HomeClient.tsx (FINAL & Comprehensive Update with Animations and UI Polish - Corrected Theme Naming and Type Error + Improved Responsive Design for 1256px issue)
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { toast } from 'react-hot-toast';
 import StoryCard from "@/components/StoryCard";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion"; // Import AnimatePresence
+import { motion, AnimatePresence } from "framer-motion";
+import Image from "next/image";
 
 // Heroicons Import
 import {
@@ -16,30 +18,40 @@ import {
   MagnifyingGlassIcon,
   ArrowLongUpIcon,
   ArrowLongDownIcon,
-  AdjustmentsHorizontalIcon, // Added for settings icon if needed, or simply use Edit Profile
+  AdjustmentsHorizontalIcon,
+  UserGroupIcon
 } from "@heroicons/react/24/outline";
 
-// Type Definitions
-type User = {
+// Type Definitions (No change here, already good)
+interface Author {
   _id: string;
   name: string;
   avatar?: string;
   bio?: string;
   email?: string;
   coverImage?: string;
-};
+  isFollowing?: boolean;
+  followers?: number;
+  followingCount?: number;
+}
 
 type Story = {
   _id: string;
   title: string;
   content: string;
   imageUrl?: string;
-  userId: string;
+  author: Author;
   createdAt: string;
   likes?: number;
   comments?: number;
-  published: boolean;
+  status?: "draft" | "published";
+  isLikedByCurrentUser?: boolean;
 };
+
+// Default Image Paths (Make sure these exist in your /public folder)
+const DEFAULT_AVATAR = "/default-avatar.png";
+const DEFAULT_STORY_IMAGE = "/default-story-image.png";
+const DEFAULT_COVER_IMAGE = "/default-cover-image.png"; // Make sure this file exists in /public
 
 // Animation Variants for Framer Motion
 const containerVariants = {
@@ -47,7 +59,7 @@ const containerVariants = {
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.1, // Slightly increased stagger for smoother reveal
+      staggerChildren: 0.1,
     },
   },
 };
@@ -59,22 +71,23 @@ const itemVariants = {
     opacity: 1,
     transition: {
       type: "spring",
-      stiffness: 120, // Slightly stiffer for more responsiveness
+      stiffness: 120,
       damping: 18,
     },
   },
 };
 
 const profileCardVariants = {
-  hidden: { opacity: 0, scale: 0.95 },
+  hidden: { opacity: 0, scale: 0.95, y: -20 },
   visible: {
     opacity: 1,
     scale: 1,
+    y: 0,
     transition: {
       type: "spring",
       stiffness: 150,
       damping: 25,
-      delay: 0.1, // Delay profile card animation slightly
+      delay: 0.1,
     },
   },
 };
@@ -85,7 +98,7 @@ const storyGridVariants = {
     opacity: 1,
     transition: {
       staggerChildren: 0.08,
-      delayChildren: 0.3, // Delay story cards slightly after profile loads
+      delayChildren: 0.3,
     },
   },
 };
@@ -112,13 +125,14 @@ const buttonHover = {
 export default function HomeClient() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<Author | null>(null);
   const [allStories, setAllStories] = useState<Story[]>([]);
   const [filteredStories, setFilteredStories] = useState<Story[]>([]);
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [loadingData, setLoadingData] = useState(true);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  // Corrected theme state type and default
+  const [theme, setTheme] = useState<"dark" | "light" | "talesy-accent">("dark");
   const [activeFilter, setActiveFilter] = useState<"all" | "published" | "drafts">(
     "all"
   );
@@ -128,40 +142,62 @@ export default function HomeClient() {
   // Helper function to format date
   const formatDate = useCallback((dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+
+    if (diffHours < 1) {
+      const diffMinutes = Math.floor(diffMs / (1000 * 60));
+      return `${diffMinutes}m ago`;
+    } else if (diffHours < 24) {
+      return `${Math.floor(diffHours)}h ago`;
+    } else if (diffHours < 24 * 7) {
+      return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    } else {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
   }, []);
 
   // Helper function to get excerpt from content (handles HTML and Markdown)
-  const getExcerpt = useCallback((content: string, maxLength: number = 150) => {
-    let plainText = content.replace(/<[^>]*>/g, ''); // Remove HTML tags
-    plainText = plainText
+  const getExcerpt = useCallback((content: string, maxLength: number = 160) => {
+    if (!content) return "";
+    const plainText = content
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .replace(/_(.*?)_/g, "$1")
       .replace(/#+\s(.*?)(?:\n|$)/g, "$1 ")
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
-      .replace(/!\[(.*?)\]\(.*?\)/g, "[Image]")
-      .replace(/```[\s\S]*?```/g, "[Code Block]")
-      .replace(/`.*?`/g, "")
-      .replace(/>\s*(.*)/g, "$1")
-      .replace(/\n\s*\n/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+      .replace(/!\[(.*?)\]\(.*?\)/g, "");
 
-    if (plainText.length <= maxLength) return plainText;
-    return plainText.substring(0, maxLength) + "...";
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = plainText;
+    const finalPlainText = tempDiv.textContent || tempDiv.innerText || "";
+
+    if (finalPlainText.length <= maxLength) return finalPlainText;
+    return finalPlainText.substring(0, maxLength) + "...";
   }, []);
 
-  // Get current theme from localStorage
+  // --- THEME MANAGEMENT ---
+  // Get current theme from localStorage and apply as data-theme attribute
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme");
-    if (savedTheme === "light" || savedTheme === "dark") {
-      setTheme(savedTheme);
+    let initialTheme: "dark" | "light" | "talesy-accent" = "dark"; // Default theme
+
+    if (savedTheme === "light") {
+      initialTheme = "light";
+    } else if (savedTheme === "dark") {
+      initialTheme = "dark";
+    } else if (savedTheme === "talesy-accent") {
+      initialTheme = "talesy-accent";
     }
+
+    setTheme(initialTheme); // Set the validated theme
+    document.documentElement.setAttribute('data-theme', initialTheme); // Apply to HTML
+    localStorage.setItem("theme", initialTheme); // Ensure localStorage always has a valid theme
   }, []);
+  // --- END THEME MANAGEMENT ---
+
+  // Helper function to get theme-dependent CSS variables
+  const getDynamicThemeClass = (prop: string) => `var(--${prop})`;
 
   // Load user data and stories based on session status
   useEffect(() => {
@@ -185,41 +221,41 @@ export default function HomeClient() {
           const userRes = await fetch("/api/users/profile");
           if (userRes.ok) {
             const userData = await userRes.json();
-            const fetchedUser: User = { ...userData.user, _id: userData.user._id || currentUserId };
-            setUser(fetchedUser);
+            setUser({
+              _id: userData.user._id || currentUserId,
+              name: userData.user.name || "",
+              avatar: userData.user.avatar || DEFAULT_AVATAR,
+              bio: userData.user.bio || "",
+              email: userData.user.email || "",
+              coverImage: userData.user.coverImage || "",
+              followers: userData.user.followersCount || 0,
+              followingCount: userData.user.followingCount || 0,
+            });
+            setFollowerCount(userData.user.followersCount || 0);
+            setFollowingCount(userData.user.followingCount || 0);
 
             // Fetch user's stories
             const storiesRes = await fetch(`/api/posts/user/${currentUserId}`);
             if (storiesRes.ok) {
               const storiesData: Story[] = await storiesRes.json();
+              console.log("Fetched stories:", storiesData);
               setAllStories(storiesData);
             } else {
-              console.error("Failed to fetch stories:", storiesRes.statusText);
-            }
-
-            // Fetch follower count
-            const followerRes = await fetch(`/api/users/${currentUserId}/followers/count`);
-            if (followerRes.ok) {
-              const followerData = await followerRes.json();
-              setFollowerCount(followerData.count);
-            } else {
-              console.error("Failed to fetch follower count:", followerRes.statusText);
-            }
-
-            // Fetch following count
-            const followingRes = await fetch(`/api/users/${currentUserId}/following/count`);
-            if (followingRes.ok) {
-              const followingData = await followingRes.json();
-              setFollowingCount(followingData.count);
-            } else {
-              console.error("Failed to fetch following count:", followingRes.statusText);
+              console.error("Failed to fetch stories:", storiesRes.status, storiesRes.statusText);
+              const errorBody = await storiesRes.text();
+              console.error("Stories API Error Response:", errorBody);
+              toast.error("Failed to load your stories.");
             }
           } else {
-            console.error("Failed to fetch user profile:", userRes.statusText);
+            console.error("Failed to fetch user profile:", userRes.status, userRes.statusText);
+            const errorBody = await userRes.text();
+            console.error("Profile API Error Response:", errorBody);
+            toast.error("Failed to load user profile.");
             setUser(null);
           }
         } catch (error) {
           console.error("Error loading profile or stories:", error);
+          toast.error("An unexpected error occurred while loading data.");
           setUser(null);
         } finally {
           setLoadingData(false);
@@ -233,9 +269,9 @@ export default function HomeClient() {
     let tempStories = [...allStories];
 
     if (activeFilter === "published") {
-      tempStories = tempStories.filter((story) => story.published);
+      tempStories = tempStories.filter((story) => story.status === "published");
     } else if (activeFilter === "drafts") {
-      tempStories = tempStories.filter((story) => !story.published);
+      tempStories = tempStories.filter((story) => story.status === "draft");
     }
 
     tempStories.sort((a, b) => {
@@ -257,94 +293,136 @@ export default function HomeClient() {
   }, [allStories, activeFilter, sortBy, sortOrder]);
 
   const handleDeleteStory = useCallback(async (storyId: string, storyImageUrl?: string) => {
-    if (confirm("Are you sure you want to delete this story?")) {
+    if (confirm("Are you sure you want to delete this story? This action cannot be undone.")) {
       try {
         const res = await fetch(`/api/posts/${storyId}`, {
           method: 'DELETE',
         });
         if (res.ok) {
           setAllStories(prevStories => prevStories.filter(story => story._id !== storyId));
-          alert("Story deleted successfully!");
+          toast.success("Story deleted successfully!");
         } else {
           const errorData = await res.json();
-          alert(`Failed to delete story: ${errorData.message || res.statusText}`);
+          toast.error(`Failed to delete story: ${errorData.message || res.statusText}`);
         }
       } catch (error) {
         console.error("Error deleting story:", error);
-        alert("An error occurred while deleting the story.");
+        toast.error("An error occurred while deleting the story.");
       }
     }
   }, []);
 
   const handleLikeStory = useCallback(async (storyId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!session?.user?.id) {
+      toast.error("You need to be logged in to like stories!");
+      router.push('/login');
+      return;
+    }
     try {
       const res = await fetch(`/api/posts/${storyId}/like`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setAllStories(prevStories =>
-          prevStories.map(story =>
-            story._id === storyId ? { ...story, likes: data.likesCount } : story
-          )
-        );
-      } else {
-        const errorData = await res.json();
-        console.error("Failed to like story:", errorData.message || res.statusText);
-        alert(errorData.message || "Failed to like story.");
+
+      if (!res.ok) {
+        const errorBody = await res.text();
+        let errorMessage = `Failed to like story: ${res.statusText}`;
+        try {
+          const errorData = JSON.parse(errorBody);
+          errorMessage = errorData.message || errorMessage;
+        } catch (parseError) {
+          console.warn("Failed to parse error response as JSON:", parseError);
+          errorMessage = `Failed to like story: ${res.statusText}. Response: ${errorBody.substring(0, 100)}...`;
+        }
+        throw new Error(errorMessage);
       }
+
+      const data = await res.json();
+      setAllStories(prevStories =>
+        prevStories.map(story =>
+          story._id === storyId ? {
+            ...story,
+            likes: data.likesCount,
+            isLikedByCurrentUser: data.liked
+          } : story
+        )
+      );
+      toast.success(data.liked ? "Story liked!" : "Like removed!");
+
     } catch (error) {
       console.error("Error liking story:", error);
-      alert("An error occurred while liking the story.");
+      toast.error(`Failed to update like status: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }, []);
+  }, [session?.user?.id, router]);
 
   const handleCommentStory = useCallback((storyId: string) => {
-    router.push(`/story/${storyId}#comments`);
+    router.push(`/story/${storyId}?openComments=true`);
   }, [router]);
+
+  const handleEditStory = useCallback((storyId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    router.push(`/write/${storyId}`);
+  }, [router]);
+
+  const handleFollowToggle = useCallback(async (userId: string, isCurrentlyFollowing: boolean, e: React.MouseEvent) => {
+    e.stopPropagation();
+    console.log(`Attempting to ${isCurrentlyFollowing ? 'unfollow' : 'follow'} user ${userId}`);
+  }, []);
+
 
   if (status === "loading" || loadingData) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="animate-pulse flex flex-col md:flex-row gap-8">
-          {/* Profile section skeleton */}
-          <div className={`${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-100/50'} rounded-xl p-6 w-full md:w-1/3 lg:w-1/4`}>
-            {/* Skeleton for cover area */}
-            <div className="h-40 w-full rounded-t-lg bg-gray-700/50 mb-4"></div>
-            {/* Skeleton for avatar */}
-            <div className="flex justify-center -mt-20 mb-4">
-              <div className="w-32 h-32 rounded-full bg-gray-600/50 border-4 border-white"></div>
+      <div className="min-h-screen" style={{ backgroundColor: getDynamicThemeClass('background-primary') }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10"> {/* Added padding for skeleton */}
+          <div className="animate-pulse flex flex-col lg:flex-row gap-8"> {/* Changed md:flex-row to lg:flex-row */}
+            {/* Profile section skeleton */}
+            <div
+              className={`rounded-xl p-6 w-full lg:w-1/4`}
+              style={{ backgroundColor: getDynamicThemeClass('background-secondary') }}
+            >
+              <div className="h-48 w-full rounded-t-lg" style={{ backgroundColor: getDynamicThemeClass('border-color') }}></div>
+              <div className="flex justify-center -mt-20 mb-4">
+                <div
+                  className="w-36 h-36 rounded-full border-4"
+                  style={{ backgroundColor: getDynamicThemeClass('text-secondary'), borderColor: getDynamicThemeClass('background-primary') }}
+                ></div>
+              </div>
+              <div className="h-8 rounded w-3/4 mx-auto mb-3" style={{ backgroundColor: getDynamicThemeClass('text-secondary') }}></div>
+              <div className="h-4 rounded w-1/2 mx-auto mb-6" style={{ backgroundColor: getDynamicThemeClass('text-secondary') }}></div>
+              <div className="h-4 rounded w-11/12 mx-auto mb-2" style={{ backgroundColor: getDynamicThemeClass('text-secondary') }}></div>
+              <div className="h-4 rounded w-10/12 mx-auto mb-6" style={{ backgroundColor: getDynamicThemeClass('text-secondary') }}></div>
+              <div
+                className="flex justify-center space-x-8 border-t border-b py-4 px-2"
+                style={{ borderColor: getDynamicThemeClass('border-color') }}
+              >
+                <div className="h-8 w-1/4 rounded" style={{ backgroundColor: getDynamicThemeClass('text-secondary') }}></div>
+                <div className="h-8 w-1/4 rounded" style={{ backgroundColor: getDynamicThemeClass('text-secondary') }}></div>
+                <div className="h-8 w-1/4 rounded" style={{ backgroundColor: getDynamicThemeClass('text-secondary') }}></div>
+              </div>
+              <div className="h-10 rounded-full w-2/3 mx-auto mt-6" style={{ backgroundColor: getDynamicThemeClass('text-secondary') }}></div>
+              <div className="mt-8 space-y-3">
+                <div className="h-8 rounded" style={{ backgroundColor: getDynamicThemeClass('text-secondary') }}></div>
+                <div className="h-8 rounded" style={{ backgroundColor: getDynamicThemeClass('text-secondary') }}></div>
+                <div className="h-8 rounded" style={{ backgroundColor: getDynamicThemeClass('text-secondary') }}></div>
+              </div>
             </div>
-            {/* Skeleton for name and email */}
-            <div className="h-6 bg-gray-600/50 rounded w-3/4 mx-auto mb-3"></div>
-            <div className="h-4 bg-gray-600/50 rounded w-1/2 mx-auto mb-6"></div>
-            {/* Skeleton for bio */}
-            <div className="h-4 bg-gray-600/50 rounded w-11/12 mx-auto mb-2"></div>
-            <div className="h-4 bg-gray-600/50 rounded w-10/12 mx-auto mb-6"></div>
-            {/* Skeleton for stats */}
-            <div className="flex justify-center space-x-8 border-t border-b py-4 px-2">
-              <div className="h-8 w-1/4 bg-gray-600/50 rounded"></div>
-              <div className="h-8 w-1/4 bg-gray-600/50 rounded"></div>
-              <div className="h-8 w-1/4 bg-gray-600/50 rounded"></div>
-            </div>
-            {/* Skeleton for edit profile button */}
-            <div className="h-10 bg-gray-600/50 rounded-full w-2/3 mx-auto mt-6"></div>
-            {/* Skeleton for quick links */}
-            <div className="mt-8 space-y-3">
-              <div className="h-8 bg-gray-600/50 rounded"></div>
-              <div className="h-8 bg-gray-600/50 rounded"></div>
-              <div className="h-8 bg-gray-600/50 rounded"></div>
-            </div>
-          </div>
 
-          {/* Stories section skeleton */}
-          <div className="w-full md:w-2/3 lg:w-3/4">
-            <div className={`h-10 ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-200/50'} rounded w-1/3 mb-6`}></div>
-            <div className="space-y-4">
-              {[1, 2, 3].map(i => (
-                <div key={i} className={`${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-100/50'} rounded-xl p-5 h-40`}></div>
-              ))}
+            {/* Stories section skeleton */}
+            <div className="w-full lg:w-3/4"> {/* Changed md:w-2/3 to w-full, added lg:w-3/4 */}
+              <div
+                className={`h-10 rounded w-1/3 mb-6`}
+                style={{ backgroundColor: getDynamicThemeClass('background-secondary') }}
+              ></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6"> {/* Removed lg:grid-cols-2 */}
+                {[1, 2, 3, 4].map(i => (
+                  <div
+                    key={i}
+                    className={`rounded-xl p-5 h-64`}
+                    style={{ backgroundColor: getDynamicThemeClass('background-secondary') }}
+                  ></div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -354,16 +432,28 @@ export default function HomeClient() {
 
   if (!user && status === "authenticated" && !loadingData) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-center">
-        <p className={`text-xl ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-          Failed to load your profile data. Please try again.
-        </p>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-4 inline-block text-indigo-500 hover:underline"
-        >
-          Retry
-        </button>
+      <div
+        className="min-h-screen flex items-center justify-center p-6"
+        style={{
+          backgroundColor: getDynamicThemeClass('background-primary'),
+          color: getDynamicThemeClass('text-primary'),
+        }}
+      >
+        <div className="text-center">
+          <h2 className="text-2xl font-semibold mb-4" style={{ color: getDynamicThemeClass('red-color') }}>Error Loading Profile</h2>
+          <p className="mb-6" style={{ color: getDynamicThemeClass('text-secondary') }}>Failed to load your profile data. Please try again.</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 rounded-lg transition-colors"
+            style={{
+              backgroundColor: getDynamicThemeClass('accent-color'),
+              color: getDynamicThemeClass('active-text'),
+              // Hover effects will need to be handled via CSS classes or CSS modules
+            }}
+          >
+            Try Again
+          </button>
+        </div>
       </div>
     );
   }
@@ -374,71 +464,98 @@ export default function HomeClient() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
+      // Main container background based on theme
+      style={{ backgroundColor: getDynamicThemeClass('background-primary') }}
     >
-      <div className="flex flex-col md:flex-row gap-8">
+      {/* Changed md:flex-row to lg:flex-row. This is the crucial change. */}
+      {/* Now, on medium screens, profile and stories will stack (flex-col by default). */}
+      {/* They will go side-by-side only on large screens (1024px and up). */}
+      <div className="flex flex-col lg:flex-row gap-8">
         {/* Profile section */}
         <motion.div
-          variants={profileCardVariants} // Use specific profile card variant
-          className="w-full md:w-1/3 lg:w-1/4"
+          variants={profileCardVariants}
+          // Responsive width and sticky behavior:
+          // w-full on small and medium screens (stacked)
+          // lg:w-1/4 on large screens (side-by-side)
+          // md:sticky, md:top-10, md:self-start are also changed to lg:sticky etc.
+          // This means sticky behavior also kicks in only on large screens when side-by-side.
+          className="w-full lg:w-1/4 lg:sticky lg:top-10 lg:self-start"
         >
           <div
-            className={`${theme === 'dark' ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-lg relative overflow-hidden transform transition-all duration-300 hover:shadow-xl`}
+            className={`rounded-xl shadow-lg relative overflow-hidden transform transition-all duration-300 hover:shadow-xl`}
+            style={{ backgroundColor: getDynamicThemeClass('background-secondary') }} // Profile card background
           >
             {/* Cover image container */}
-            <div className="h-48 w-full relative"> {/* Increased height to h-48 for better visual */}
+            <div className="h-48 w-full relative">
               {user?.coverImage ? (
-                <img
+                <Image
                   src={user.coverImage}
                   alt="Cover"
-                  className="w-full h-full object-cover"
+                  layout="fill"
+                  objectFit="cover"
+                  className="rounded-t-lg"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = DEFAULT_COVER_IMAGE;
+                  }}
                 />
               ) : (
-                // Default background with Talesy logo or gradient
                 <div
-                  className="w-full h-full bg-cover bg-center flex items-center justify-center"
-                  style={{
-                    backgroundImage: "url('/talesy-background-logo.png')", // Ensure this path is correct
-                    backgroundColor: theme === 'dark' ? '#2d3748' : '#e2e8f0',
-                    backgroundSize: '30%',
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'center',
-                  }}
+                  className="w-full h-full flex flex-col items-center justify-center text-center p-4"
+                  style={{ backgroundColor: getDynamicThemeClass('border-color') }} // Default cover background
                 >
-                  {/* Optional: Add text overlay if needed, e.g., "Talesy" */}
+                  <Image
+                    src={DEFAULT_COVER_IMAGE} // Your actual default cover image
+                    alt="Default Cover"
+                    width={80}
+                    height={80}
+                    className="opacity-50 mb-2"
+                  />
+                  <p className="text-sm italic" style={{ color: getDynamicThemeClass('text-secondary') }}>Add a cover image</p>
                 </div>
               )}
-               {/* Subtle gradient overlay to enhance profile image visibility */}
-               <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
+              {/* This gradient overlay can remain, it's typically dark on dark/light themes */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
             </div>
 
-            {/* Profile picture - positioned relative to the parent, with negative margin to overlap cover */}
-            <div className="flex justify-center -mt-20 z-10 relative"> {/* Adjusted -mt-20 for h-48 cover */}
+            {/* Profile picture */}
+            <div className="flex justify-center -mt-20 z-10 relative">
               <motion.img
                 initial={{ scale: 0, rotate: -180 }}
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ type: "spring", stiffness: 150, damping: 10, delay: 0.3 }}
-                src={user?.avatar || "/default-avatar.png"}
+                src={user?.avatar || DEFAULT_AVATAR}
                 alt={user?.name || "User Avatar"}
-                className="w-36 h-36 rounded-full border-4 border-white object-cover bg-white shadow-lg transform transition-transform duration-300 hover:scale-105"
+                className="w-36 h-36 rounded-full border-4 object-cover shadow-lg transform transition-transform duration-300 hover:scale-105"
+                // Avatar border and background
+                style={{ borderColor: getDynamicThemeClass('background-primary'), backgroundColor: getDynamicThemeClass('background-primary') }}
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
-                  target.src = "/default-avatar.png";
+                  target.src = DEFAULT_AVATAR;
                 }}
               />
             </div>
 
-            {/* User info */}
-            <div className="text-center px-6 py-4 mt-[-1rem]">
+            {/* User info - Adjusted for better spacing and animation */}
+            <div className="text-center px-6 py-4 relative z-20 -mt-16">
               <motion.h2
-                variants={itemVariants}
-                className={`text-3xl font-extrabold ${theme === 'dark' ? 'text-white' : 'text-gray-900'} mb-1`}
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.4, type: "spring", stiffness: 100 }}
+                className={`text-3xl sm:text-4xl font-extrabold mb-1 pt-16
+                  bg-gradient-to-r from-indigo-400 to-purple-400 text-transparent bg-clip-text
+                  drop-shadow-lg`}
+              // Keeping the gradient for name as it's a stylistic choice, not theme-dependent background
               >
                 {user?.name}
               </motion.h2>
               {user?.email && (
                 <motion.p
-                  variants={itemVariants}
-                  className="text-gray-500 text-sm mb-3"
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.5, type: "spring", stiffness: 100 }}
+                  className="text-sm mb-3 w-fit mx-auto break-all"
+                  style={{ color: getDynamicThemeClass('text-secondary') }}
                 >
                   {user.email}
                 </motion.p>
@@ -446,77 +563,143 @@ export default function HomeClient() {
 
               {user?.bio && (
                 <motion.p
-                  variants={itemVariants}
-                  className={`mt-2 text-md ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.6, type: "spring", stiffness: 100 }}
+                  className={`mt-2 text-md mb-6`}
+                  style={{ color: getDynamicThemeClass('text-primary') }}
                 >
                   {user.bio}
                 </motion.p>
               )}
 
-              {/* Stats - NOW CLICKABLE */}
+              {/* Stats - NOW CLICKABLE and with icon */}
               <motion.div
-                variants={containerVariants} // Using container variants for stagger effect on stats
+                variants={containerVariants}
                 initial="hidden"
                 animate="visible"
-                className="mt-8 flex justify-around items-center border-y py-4 px-2
-                transition-colors duration-300
-                "
+                className={`flex justify-around items-center border-y py-4 px-2`}
+                style={{ borderColor: getDynamicThemeClass('border-color') }}
               >
-                <motion.div variants={statItemVariants} className="text-center">
-                  <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                {/* Stories Count - Added Icon */}
+                <motion.div variants={statItemVariants} className="text-center flex flex-col items-center">
+                  <BookOpenIcon className={`w-5 h-5 mb-1`} style={{ color: getDynamicThemeClass('text-secondary') }} />
+                  <div className={`text-xl font-bold`} style={{ color: getDynamicThemeClass('accent-color') }}>
                     {allStories.length}
                   </div>
-                  <div className="text-sm text-gray-500">Stories</div>
+                  <div className="text-xs" style={{ color: getDynamicThemeClass('text-secondary') }}>Stories</div>
                 </motion.div>
 
                 <motion.div variants={statItemVariants} className="text-center">
                   {user?._id && (
-                    <Link href={`/profile/${user._id}/followers`} className="group cursor-pointer">
-                      <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-white group-hover:text-indigo-300' : 'text-gray-800 group-hover:text-indigo-600'} transition-colors`}>
+                    <Link
+                      href={`/profile/${user._id}/followers`}
+                      // Underline classes removed. Only group-hover:text-[var(--accent-color)] remains
+                      className="group cursor-pointer flex flex-col items-center"
+                    >
+                      <UserGroupIcon
+                        className={`w-5 h-5 mb-1 group-hover:text-[var(--accent-color)] transition-colors`}
+                        style={{ color: getDynamicThemeClass('text-secondary') }}
+                      />
+                      <div
+                        className={`text-xl font-bold group-hover:text-[var(--accent-color)] transition-colors`}
+                        style={{ color: getDynamicThemeClass('text-primary') }}
+                      >
                         {followerCount}
                       </div>
-                      <div className="text-sm text-gray-500 group-hover:text-indigo-400 transition-colors">Followers</div>
+                      <div
+                        className="text-xs group-hover:text-[var(--accent-color)] transition-colors"
+                        style={{ color: getDynamicThemeClass('text-secondary') }}
+                      >
+                        Followers
+                      </div>
                     </Link>
                   )}
-                  {!user?._id && ( // Fallback if user ID is not available
-                    <div className="text-center">
-                      <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
+                  {!user?._id && (
+                    <div className="text-center flex flex-col items-center">
+                      <UserGroupIcon
+                        className={`w-5 h-5 mb-1`}
+                        style={{ color: getDynamicThemeClass('text-secondary') }}
+                      />
+                      <div
+                        className="text-xl font-bold"
+                        style={{ color: getDynamicThemeClass('text-primary') }}
+                      >
                         {followerCount}
                       </div>
-                      <div className="text-sm text-gray-500">Followers</div>
+                      <div
+                        className="text-xs"
+                        style={{ color: getDynamicThemeClass('text-secondary') }}
+                      >
+                        Followers
+                      </div>
                     </div>
                   )}
                 </motion.div>
 
                 <motion.div variants={statItemVariants} className="text-center">
                   {user?._id && (
-                    <Link href={`/profile/${user._id}/following`} className="group cursor-pointer">
-                      <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-white group-hover:text-indigo-300' : 'text-gray-800 group-hover:text-indigo-600'} transition-colors`}>
+                    <Link
+                      href={`/profile/${user._id}/following`}
+                      // Underline classes removed. Only group-hover:text-[var(--accent-color)] remains
+                      className="group cursor-pointer flex flex-col items-center"
+                    >
+                      <UserGroupIcon
+                        className={`w-5 h-5 mb-1 group-hover:text-[var(--accent-color)] transition-colors`}
+                        style={{ color: getDynamicThemeClass('text-secondary') }}
+                      />
+                      <div
+                        className={`text-xl font-bold group-hover:text-[var(--accent-color)] transition-colors`}
+                        style={{ color: getDynamicThemeClass('text-primary') }}
+                      >
                         {followingCount}
                       </div>
-                      <div className="text-sm text-gray-500 group-hover:text-indigo-400 transition-colors">Following</div>
+                      <div
+                        className="text-xs group-hover:text-[var(--accent-color)] transition-colors"
+                        style={{ color: getDynamicThemeClass('text-secondary') }}
+                      >
+                        Following
+                      </div>
                     </Link>
                   )}
-                  {!user?._id && ( // Fallback if user ID is not available
-                    <div className="text-center">
-                      <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
+                  {!user?._id && (
+                    <div className="text-center flex flex-col items-center">
+                      <UserGroupIcon
+                        className={`w-5 h-5 mb-1`}
+                        style={{ color: getDynamicThemeClass('text-secondary') }}
+                      />
+                      <div
+                        className="text-xl font-bold"
+                        style={{ color: getDynamicThemeClass('text-primary') }}
+                      >
                         {followingCount}
                       </div>
-                      <div className="text-sm text-gray-500">Following</div>
+                      <div
+                        className="text-xs"
+                        style={{ color: getDynamicThemeClass('text-secondary') }}
+                      >
+                        Following
+                      </div>
                     </div>
                   )}
                 </motion.div>
               </motion.div>
 
               {/* Actions */}
-              <motion.div variants={itemVariants} className="mt-6 mb-4">
+              <motion.div
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.7, type: "spring", stiffness: 100 }}
+                className="mt-6 mb-4"
+              >
                 <Link
                   href="/settings"
-                  className={`inline-flex items-center justify-center px-6 py-2 border border-transparent text-sm font-medium rounded-full shadow-sm ${
-                    theme === 'dark'
-                      ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                      : 'bg-indigo-500 hover:bg-indigo-600 text-white'
-                  } transition duration-300 ease-in-out transform hover:scale-105`}
+                  className={`inline-flex items-center justify-center px-6 py-2 border border-transparent text-sm font-medium rounded-full shadow-sm transition duration-300 ease-in-out transform hover:scale-105`}
+                  style={{
+                    backgroundColor: getDynamicThemeClass('accent-color'),
+                    color: getDynamicThemeClass('active-text'),
+                    // Hover effects will need to be handled via CSS classes or CSS modules
+                  }}
                 >
                   <AdjustmentsHorizontalIcon className="w-5 h-5 mr-2 -ml-1" />
                   Edit Profile
@@ -527,11 +710,14 @@ export default function HomeClient() {
 
           {/* Quick Links section */}
           <motion.div
-            variants={itemVariants}
-            className={`mt-6 rounded-xl shadow-lg overflow-hidden ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'} transform transition-all duration-300 hover:shadow-xl`}
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.8, type: "spring", stiffness: 100 }}
+            className={`mt-6 rounded-xl shadow-lg overflow-hidden transform transition-all duration-300 hover:shadow-xl`}
+            style={{ backgroundColor: getDynamicThemeClass('background-secondary') }} // Quick links card background
           >
-            <div className={`px-6 py-4 border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-              <h3 className={`text-xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
+            <div className={`px-6 py-4 border-b`} style={{ borderColor: getDynamicThemeClass('border-color') }}>
+              <h3 className={`text-xl font-semibold`} style={{ color: getDynamicThemeClass('text-primary') }}>
                 Quick Actions
               </h3>
             </div>
@@ -540,11 +726,13 @@ export default function HomeClient() {
                 <motion.li variants={itemVariants}>
                   <Link
                     href="/write/new"
-                    className={`flex items-center px-4 py-3 rounded-lg ${
-                      theme === 'dark'
-                        ? 'hover:bg-gray-700 text-indigo-400'
-                        : 'hover:bg-gray-100 text-indigo-600'
-                    } transition duration-200 transform hover:translate-x-1`}
+                    className={`flex items-center px-4 py-3 rounded-lg transition duration-200 transform hover:translate-x-1`}
+                    style={{
+                      color: getDynamicThemeClass('accent-color'), // Hover background needs CSS class or module
+                      // Make sure you have appropriate CSS for hover on this Link component
+                      // For example, in global.css: .hover-bg-theme:hover { background-color: var(--hover-bg); }
+                      // And then add className="hover-bg-theme"
+                    }}
                   >
                     <PencilSquareIcon className="w-5 h-5 mr-3" />
                     Write New Story
@@ -553,11 +741,10 @@ export default function HomeClient() {
                 <motion.li variants={itemVariants}>
                   <Link
                     href="/dashboard"
-                    className={`flex items-center px-4 py-3 rounded-lg ${
-                      theme === 'dark'
-                        ? 'hover:bg-gray-700 text-indigo-400'
-                        : 'hover:bg-gray-100 text-indigo-600'
-                    } transition duration-200 transform hover:translate-x-1`}
+                    className={`flex items-center px-4 py-3 rounded-lg transition duration-200 transform hover:translate-x-1`}
+                    style={{
+                      color: getDynamicThemeClass('accent-color'), // Hover background needs CSS class or module
+                    }}
                   >
                     <Squares2X2Icon className="w-5 h-5 mr-3" />
                     Dashboard
@@ -566,11 +753,10 @@ export default function HomeClient() {
                 <motion.li variants={itemVariants}>
                   <Link
                     href="/explore"
-                    className={`flex items-center px-4 py-3 rounded-lg ${
-                      theme === 'dark'
-                        ? 'hover:bg-gray-700 text-indigo-400'
-                        : 'hover:bg-gray-100 text-indigo-600'
-                    } transition duration-200 transform hover:translate-x-1`}
+                    className={`flex items-center px-4 py-3 rounded-lg transition duration-200 transform hover:translate-x-1`}
+                    style={{
+                      color: getDynamicThemeClass('accent-color'), // Hover background needs CSS class or module
+                    }}
                   >
                     <MagnifyingGlassIcon className="w-5 h-5 mr-3" />
                     Explore Stories
@@ -582,10 +768,11 @@ export default function HomeClient() {
         </motion.div>
 
         {/* Stories section */}
-        <div className="w-full md:w-2/3 lg:w-3/4">
+        <div className="w-full lg:w-3/4"> {/* Changed md:w-2/3 to w-full, added lg:w-3/4 */}
           <motion.h2
             variants={itemVariants}
-            className={`text-3xl font-extrabold mb-6 ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}
+            className={`text-3xl font-extrabold mb-6`}
+            style={{ color: getDynamicThemeClass('text-primary') }}
           >
             Your Stories
           </motion.h2>
@@ -593,20 +780,29 @@ export default function HomeClient() {
           <AnimatePresence mode="wait">
             {allStories.length === 0 && !loadingData ? (
               <motion.div
-                key="no-stories" // Key for AnimatePresence
+                key="no-stories"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
-                className={`rounded-xl border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} p-10 text-center shadow-sm`}
+                className={`rounded-xl border p-10 text-center shadow-sm`}
+                style={{
+                  backgroundColor: getDynamicThemeClass('background-secondary'),
+                  borderColor: getDynamicThemeClass('border-color'),
+                }}
               >
-                <BookOpenIcon className="mx-auto h-16 w-16 text-gray-400 mb-4" />
-                <p className={`mt-4 text-lg font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
+                <BookOpenIcon className="mx-auto h-16 w-16 mb-4" style={{ color: getDynamicThemeClass('text-secondary') }} />
+                <p className={`mt-4 text-lg font-medium`} style={{ color: getDynamicThemeClass('text-primary') }}>
                   You haven't published any stories yet. Start writing your first masterpiece!
                 </p>
                 <Link
                   href="/write/new"
-                  className="mt-6 inline-flex items-center px-8 py-3 border border-transparent text-base font-medium rounded-full shadow-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-300 ease-in-out transform hover:scale-105"
+                  className="mt-6 inline-flex items-center px-8 py-3 border border-transparent text-base font-medium rounded-full shadow-md text-white transition duration-300 ease-in-out transform hover:scale-105"
+                  style={{
+                    backgroundColor: getDynamicThemeClass('accent-color'),
+                    color: getDynamicThemeClass('active-text'),
+                    // Hover effects will need to be handled via CSS classes or CSS modules
+                  }}
                 >
                   <PencilSquareIcon className="w-5 h-5 mr-2" />
                   Start Writing
@@ -614,66 +810,78 @@ export default function HomeClient() {
               </motion.div>
             ) : (
               <motion.div
-                key="stories-content" // Key for AnimatePresence
-                variants={storyGridVariants} // Apply stagger to stories grid
+                key="stories-content"
+                variants={storyGridVariants}
                 initial="hidden"
                 animate="visible"
-                exit="hidden" // Exit animation
+                exit="hidden"
                 className="space-y-6"
               >
                 {/* Filter and Sort options */}
                 <motion.div
                   variants={itemVariants}
-                  className={`flex flex-col sm:flex-row rounded-lg overflow-hidden border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm`}
+                  className={`flex flex-col sm:flex-row rounded-lg overflow-hidden border shadow-sm`}
+                  style={{
+                    backgroundColor: getDynamicThemeClass('background-secondary'),
+                    borderColor: getDynamicThemeClass('border-color'),
+                  }}
                 >
                   {/* Filter Tabs */}
-                  <div className="flex flex-1 border-b sm:border-b-0 sm:border-r border-gray-700/50">
+                  <div className={`flex flex-1 border-b sm:border-b-0 sm:border-r`} style={{ borderColor: getDynamicThemeClass('border-color') }}>
                     <button
                       onClick={() => setActiveFilter("all")}
-                      className={`flex-1 py-3 px-4 text-sm font-medium ${
-                        activeFilter === "all"
-                          ? theme === 'dark' ? 'bg-indigo-700 text-white shadow-inner' : 'bg-indigo-600 text-white shadow-inner'
-                          : theme === 'dark' ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'
-                      } transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:z-10`}
+                      className={`flex-1 py-3 px-4 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:z-10`}
+                      style={{
+                        backgroundColor: activeFilter === "all" ? getDynamicThemeClass('accent-color') : getDynamicThemeClass('background-secondary'),
+                        color: activeFilter === "all" ? getDynamicThemeClass('active-text') : getDynamicThemeClass('text-primary'),
+                        boxShadow: activeFilter === "all" ? 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)' : 'none',
+                        outlineColor: getDynamicThemeClass('accent-color'),
+                      }}
                     >
-                      All Stories
+                      All Stories ({allStories.length})
                     </button>
                     <button
                       onClick={() => setActiveFilter("published")}
-                      className={`flex-1 py-3 px-4 text-sm font-medium ${
-                        activeFilter === "published"
-                          ? theme === 'dark' ? 'bg-indigo-700 text-white shadow-inner' : 'bg-indigo-600 text-white shadow-inner'
-                          : theme === 'dark' ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'
-                      } transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:z-10`}
+                      className={`flex-1 py-3 px-4 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:z-10`}
+                      style={{
+                        backgroundColor: activeFilter === "published" ? getDynamicThemeClass('accent-color') : getDynamicThemeClass('background-secondary'),
+                        color: activeFilter === "published" ? getDynamicThemeClass('active-text') : getDynamicThemeClass('text-primary'),
+                        boxShadow: activeFilter === "published" ? 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)' : 'none',
+                        outlineColor: getDynamicThemeClass('accent-color'),
+                      }}
                     >
-                      Published
+                      Published ({allStories.filter(s => s.status === 'published').length})
                     </button>
                     <button
                       onClick={() => setActiveFilter("drafts")}
-                      className={`flex-1 py-3 px-4 text-sm font-medium ${
-                        activeFilter === "drafts"
-                          ? theme === 'dark' ? 'bg-indigo-700 text-white shadow-inner' : 'bg-indigo-600 text-white shadow-inner'
-                          : theme === 'dark' ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'
-                      } transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:z-10`}
+                      className={`flex-1 py-3 px-4 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:z-10`}
+                      style={{
+                        backgroundColor: activeFilter === "drafts" ? getDynamicThemeClass('accent-color') : getDynamicThemeClass('background-secondary'),
+                        color: activeFilter === "drafts" ? getDynamicThemeClass('active-text') : getDynamicThemeClass('text-primary'),
+                        boxShadow: activeFilter === "drafts" ? 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)' : 'none',
+                        outlineColor: getDynamicThemeClass('accent-color'),
+                      }}
                     >
-                      Drafts
+                      Drafts ({allStories.filter(s => s.status === 'draft').length})
                     </button>
                   </div>
 
                   {/* Sort Dropdowns */}
-                  <div className="flex items-center p-3 sm:p-2 border-t sm:border-t-0 sm:border-l border-gray-700/50">
-                    <label htmlFor="sort-by" className={`text-sm font-medium mr-2 whitespace-nowrap ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                  <div className={`flex items-center p-3 sm:p-2 border-t sm:border-t-0 sm:border-l`} style={{ borderColor: getDynamicThemeClass('border-color') }}>
+                    <label htmlFor="sort-by" className={`text-sm font-medium mr-2 whitespace-nowrap`} style={{ color: getDynamicThemeClass('text-primary') }}>
                       Sort by:
                     </label>
                     <select
                       id="sort-by"
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value as "createdAt" | "title")}
-                      className={`block w-full rounded-md border ${
-                        theme === 'dark'
-                          ? 'bg-gray-700 border-gray-600 text-white'
-                          : 'bg-gray-100 border-gray-300 text-gray-800'
-                      } focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm shadow-sm`}
+                      className={`block w-full rounded-md border shadow-sm`}
+                      style={{
+                        backgroundColor: getDynamicThemeClass('background-secondary'),
+                        borderColor: getDynamicThemeClass('border-color'),
+                        color: getDynamicThemeClass('text-primary'),
+                        outlineColor: getDynamicThemeClass('accent-color'),
+                      }}
                     >
                       <option value="createdAt">Date Created</option>
                       <option value="title">Title</option>
@@ -681,8 +889,12 @@ export default function HomeClient() {
                     <motion.button
                       whileHover={buttonHover}
                       onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-                      className={`ml-2 p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} transition-colors duration-200`}
-                      title={sortOrder === "asc" ? "Sort Descending" : "Sort Ascending"}
+                      className="ml-2 p-2 rounded-md transition-colors"
+                      style={{
+                        backgroundColor: getDynamicThemeClass('background-secondary'),
+                        color: getDynamicThemeClass('text-primary'),
+                        borderColor: getDynamicThemeClass('border-color'),
+                      }}
                     >
                       {sortOrder === "asc" ? (
                         <ArrowLongUpIcon className="w-5 h-5" />
@@ -693,83 +905,57 @@ export default function HomeClient() {
                   </div>
                 </motion.div>
 
-                {/* Story cards grid */}
-                <motion.div
-                  variants={containerVariants} // Stagger children for each story card
-                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                >
-                  {filteredStories.length > 0 ? (
-                    <AnimatePresence> {/* For individual story card animations on filter change */}
-                      {filteredStories.map((story) => (
-                        <motion.div
-                          key={story._id}
-                          layout // Enable layout animation for smooth reordering/filtering
-                          initial={{ opacity: 0, y: 50, scale: 0.8 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -20, scale: 0.8 }}
-                          transition={{ duration: 0.3, type: "spring", stiffness: 100, damping: 15 }}
-                        >
-                          <StoryCard
-                            _id={story._id}
-                            title={story.title}
-                            content={story.content}
-                            imageUrl={story.imageUrl}
-                            userId={story.userId || (session?.user?.id as string) || ""}
-                            createdAt={story.createdAt}
-                            status={story.published ? "published" : "draft"}
-                            likes={story.likes}
-                            comments={story.comments}
-                            onDelete={handleDeleteStory}
-                            onLike={handleLikeStory}
-                            onComment={handleCommentStory}
-                            formatDate={formatDate}
-                            getExcerpt={getExcerpt}
-                          />
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
-                  ) : (
-                    <motion.div
-                      key="no-filtered-stories"
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      transition={{ duration: 0.3 }}
-                      className={`col-span-full rounded-xl border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} p-10 text-center shadow-sm`}
-                    >
-                      <p className={`mt-4 text-lg ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
-                        No {activeFilter === 'published' ? 'published' : activeFilter === 'drafts' ? 'draft' : ''} stories found.
-                      </p>
-                      {activeFilter !== 'all' && (
-                        <button
-                          onClick={() => setActiveFilter('all')}
-                          className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-200"
-                        >
-                          Show All Stories
-                        </button>
-                      )}
-                    </motion.div>
-                  )}
-
-                  {/* Create New Story Card - always visible */}
-                  <motion.div variants={itemVariants}>
-                    <Link
-                      href="/write/new"
-                      className={`block rounded-xl border-2 border-dashed p-8 text-center h-full flex flex-col justify-center items-center ${
-                        theme === 'dark'
-                          ? 'border-gray-700 hover:border-indigo-500/50 bg-gray-800 text-gray-300'
-                          : 'border-gray-300 hover:border-indigo-500/50 bg-white text-gray-600'
-                      } transition duration-300 ease-in-out hover:shadow-lg transform hover:scale-[1.01]`}
-                    >
-                      <PencilSquareIcon
-                        className={`mx-auto h-14 w-14 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-400'}`}
-                      />
-                      <p className={`mt-4 text-lg font-semibold ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
-                        Create a new story
-                      </p>
-                    </Link>
+                {/* Story Grid */}
+                {/* Changed lg:grid-cols-2 to just sm:grid-cols-2. */}
+                {/* Now it will be 1 column on extra-small, 2 columns on small and up. */}
+                {/* Since the profile sidebar only appears on 'lg' screens, the stories section */}
+                {/* will have full width on 'md' screens and can comfortably fit 2 columns. */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <AnimatePresence>
+                    {filteredStories.map((story) => (
+                      <motion.div
+                        key={story._id}
+                        variants={itemVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="hidden"
+                      >
+                        <StoryCard
+                          {...story}
+                          onDelete={handleDeleteStory}
+                          onLike={handleLikeStory}
+                          onComment={handleCommentStory}
+                          onEdit={handleEditStory}
+                          formatDate={formatDate}
+                          getExcerpt={getExcerpt}
+                          currentUserId={session?.user?.id || ''}
+                          defaultStoryImage={DEFAULT_STORY_IMAGE}
+                          defaultAvatar={DEFAULT_AVATAR}
+                          theme={theme}
+                          showOwnerActions={true}
+                        />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+                {filteredStories.length === 0 && (
+                  <motion.div
+                    key="no-filtered-stories"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3 }}
+                    className={`rounded-xl border p-10 text-center shadow-sm`}
+                    style={{
+                      backgroundColor: getDynamicThemeClass('background-secondary'),
+                      borderColor: getDynamicThemeClass('border-color'),
+                    }}
+                  >
+                    <p className={`mt-4 text-lg font-medium`} style={{ color: getDynamicThemeClass('text-primary') }}>
+                      No stories found for the current filter.
+                    </p>
                   </motion.div>
-                </motion.div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

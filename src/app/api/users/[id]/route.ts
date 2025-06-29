@@ -1,72 +1,74 @@
 // app/api/users/[id]/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import { getMongoClient } from '@/lib/dbConnect'; // <--- Change here
+import { NextResponse } from 'next/server';
+import { getMongoClient } from '@/lib/dbConnect';
 import { ObjectId } from 'mongodb';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
 
-// Helper function for consistent ObjectId conversion
 function toObjectId(id: string | ObjectId) {
   if (typeof id === 'string' && ObjectId.isValid(id)) return new ObjectId(id);
   if (id instanceof ObjectId) return id;
-  throw new Error('Invalid ObjectId'); // Explicitly throw for invalid formats
+  throw new Error('Invalid ObjectId');
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) { // Use params for cleaner ID extraction
+export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    // Extract userId from params directly
-    const userIdRaw = params.id; // Use params.id
+    const session = await getServerSession(authOptions);
+    const currentUserId = session?.user?.id ? toObjectId(session.user.id) : null;
+    const userIdToFetch = params.id;
 
-    if (!userIdRaw) {
+    if (!userIdToFetch) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
-    const client = await getMongoClient(); // <--- Change here
+    const userIdObj = toObjectId(userIdToFetch);
+
+    const client = await getMongoClient();
     const db = client.db('talesy');
     const userCollection = db.collection('users');
     const followCollection = db.collection('follows');
 
-    let user = null;
-    let userIdObj;
-
-    try {
-      userIdObj = toObjectId(userIdRaw); // Try converting to ObjectId
-    } catch (e) {
-      return NextResponse.json({ error: 'Invalid user ID format' }, { status: 400 });
-    }
-
-    user = await userCollection.findOne({ _id: userIdObj });
-
-    // Removed the fallback to `userId: userId` as _id should be the primary key
-    // If your users collection sometimes uses 'userId' string field for ID,
-    // this needs specific confirmation. Standard practice is _id.
-    // If you need to search by a 'userId' string field, you would add:
-    // if (!user && typeof userIdRaw === 'string') {
-    //   user = await userCollection.findOne({ userId: userIdRaw });
-    // }
+    const user = await userCollection.findOne(
+      { _id: userIdObj },
+      { projection: { _id: 1, name: 1, avatar: 1, bio: 1, emailPreferences: 1, email: 1 } } // Fetch necessary fields
+    );
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Get follower count - use userIdObj for consistency
-    const followerCount = await followCollection.countDocuments({
+    // Calculate followers count
+    const followersCount = await followCollection.countDocuments({
       followingId: userIdObj,
     });
 
-    // Get following count - use userIdObj for consistency
+    // Calculate following count for the user whose profile is being viewed
     const followingCount = await followCollection.countDocuments({
       followerId: userIdObj,
     });
-    
+
+    // Check if the current logged-in user is following this profile
+    let isFollowing = false;
+    if (currentUserId && currentUserId.toString() !== userIdObj.toString()) {
+      const followRecord = await followCollection.findOne({
+        followerId: currentUserId,
+        followingId: userIdObj,
+      });
+      isFollowing = !!followRecord;
+    }
+
     return NextResponse.json({
       _id: user._id.toString(),
-      name: user.name || 'Anonymous User',
-      avatar: user.avatar || null,
-      bio: user.bio || null,
-      followers: followerCount,
-      following: followingCount,
+      name: user.name,
+      avatar: user.avatar,
+      bio: user.bio,
+      followers: followersCount,
+      followingCount: followingCount,
+      isFollowing: isFollowing,
     });
+
   } catch (error) {
-    console.error('GET /users/[id] error:', error);
+    console.error('Error fetching user profile:', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

@@ -1,9 +1,9 @@
 // src/app/api/users/[id]/followers/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getMongoClient } from '@/lib/dbConnect'; // <--- Change here
-import { ObjectId } from 'mongodb';
+import { getMongoClient } from '@/lib/dbConnect';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
+import { toObjectId } from '@/lib/utils/objectIdConverter';
 
 // Define a minimal User type for the list
 interface UserProfile {
@@ -11,69 +11,85 @@ interface UserProfile {
   name: string;
   avatar?: string;
   bio?: string;
-  isFollowing?: boolean; 
+  isFollowing?: boolean;
 }
 
-function toObjectId(id: string | ObjectId) {
-  if (typeof id === 'string' && ObjectId.isValid(id)) return new ObjectId(id);
-  if (id instanceof ObjectId) return id;
-  throw new Error('Invalid ObjectId');
-}
-
-export async function GET(req: NextRequest) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     const currentUserId = session?.user?.id;
 
-    const urlSegments = req.nextUrl.pathname.split('/');
-    const targetUserIdRaw = urlSegments[urlSegments.indexOf('users') + 1];
+    const targetUserIdRaw = params.id;
 
     if (!targetUserIdRaw) {
+      console.log('Error: User ID is required');
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
-    const targetUserId = toObjectId(targetUserIdRaw); // Convert to ObjectId
+    const targetUserId = toObjectId(targetUserIdRaw);
+    if (!targetUserId) {
+      console.log('Error: Invalid Target User ID format for:', targetUserIdRaw);
+      return NextResponse.json({ error: 'Invalid Target User ID format' }, { status: 400 });
+    }
+    console.log('Fetching followers for targetUserId:', targetUserId.toString());
 
-    const client = await getMongoClient(); // <--- Change here
+
+    const client = await getMongoClient();
     const db = client.db('talesy');
     const followCollection = db.collection('follows');
     const userCollection = db.collection('users');
 
     const followers = await followCollection.find({
-      followingId: targetUserId, // Use ObjectId
+      followingId: targetUserId,
     }).toArray();
 
-    const followerIds = followers.map(f => f.followerId);
+    console.log('Raw followers records found:', followers.length, followers); // LOG THIS
+
+    const followerIds = followers.map(f => {
+      const oid = toObjectId(f.followerId);
+      if (!oid) {
+        console.warn('Skipping invalid followerId:', f.followerId); // WARN for bad IDs
+      }
+      return oid;
+    }).filter(Boolean) as import('mongodb').ObjectId[];
+
+    console.log('Filtered followerIds to query:', followerIds.length, followerIds.map(id => id.toString())); // LOG THIS
 
     const followerProfiles: UserProfile[] = [];
     if (followerIds.length > 0) {
-      const objectIdFollowerIds = followerIds.map(id => toObjectId(id)); // Use toObjectId
-
       const users = await userCollection.find(
-        { _id: { $in: objectIdFollowerIds } },
-        { projection: { name: 1, avatar: 1, bio: 1 } } // Removed emailPreferences as it's not part of UserProfile
+        { _id: { $in: followerIds } },
+        { projection: { name: 1, avatar: 1, bio: 1 } }
       ).toArray();
+
+      console.log('User profiles found for followerIds:', users.length, users); // LOG THIS
 
       for (const user of users) {
         let isFollowing = false;
         if (currentUserId) {
-          const followingCheck = await followCollection.findOne({
-            followerId: toObjectId(currentUserId), // Convert to ObjectId
-            followingId: user._id, // User._id is already ObjectId from query result
-          });
-          isFollowing = !!followingCheck;
+          const currentUserIdObj = toObjectId(currentUserId);
+          if (currentUserIdObj) {
+              const followingCheck = await followCollection.findOne({
+                followerId: currentUserIdObj,
+                followingId: user._id,
+              });
+              isFollowing = !!followingCheck;
+          } else {
+              console.warn('Invalid currentUserId for isFollowing check:', currentUserId);
+          }
         }
 
         followerProfiles.push({
-          _id: user._id.toString(), // Ensure _id is string for client
+          _id: user._id.toString(),
           name: user.name || 'Anonymous User',
           avatar: user.avatar,
           bio: user.bio,
-          isFollowing: isFollowing, 
+          isFollowing: isFollowing,
         });
       }
     }
 
+    console.log('Final followerProfiles being returned:', followerProfiles.length, followerProfiles); // LOG THIS
     return NextResponse.json(followerProfiles);
   } catch (error) {
     console.error('Error fetching followers list:', error);

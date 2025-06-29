@@ -1,183 +1,220 @@
-// app/api/posts/[id]/comments/route.ts
-import { NextResponse } from 'next/server';
-import { getMongoClient } from '@/lib/dbConnect'; // <--- Change here
-import { ObjectId } from 'mongodb';
+// src/app/api/posts/[id]/comments/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
-import { sendTemplateEmail } from '@/lib/email';
+import { authOptions } from '@/lib/auth'; // IMPORTANT: Use '@/auth' as per your setup
+import dbConnect from '@/lib/dbConnect'; // Adjust path if necessary
 
-function toObjectId(id: string | ObjectId) {
-  if (typeof id === 'string' && ObjectId.isValid(id)) return new ObjectId(id);
-  if (id instanceof ObjectId) return id;
-  throw new Error('Invalid ObjectId');
+import Comment from '@/models/comment';
+import User from '@/models/user';
+import Post from '@/models/post';
+import CommentLike from '@/models/commentLike';
+
+// Helper for consistent Mongoose ObjectId conversion and validation
+function toMongooseObjectId(id: string | mongoose.Types.ObjectId): mongoose.Types.ObjectId {
+  if (id instanceof mongoose.Types.ObjectId) return id;
+  if (typeof id === 'string' && mongoose.Types.ObjectId.isValid(id)) {
+    return new mongoose.Types.ObjectId(id);
+  }
+  throw new Error(`Invalid ID format: ${id}`);
 }
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+// Recursive function to build comment tree
+function buildCommentTree(
+  comments: any[],
+  parentId: mongoose.Types.ObjectId | null = null,
+  currentUserLikes: Set<string>
+): any[] {
+  const nestedComments = [];
+
+  for (const comment of comments) {
+    const commentParentId = comment.parentId ? comment.parentId.toString() : null;
+    const targetParentId = parentId ? parentId.toString() : null;
+
+    if (commentParentId === targetParentId) {
+      const children = buildCommentTree(
+        comments,
+        toMongooseObjectId(comment._id),
+        currentUserLikes
+      );
+
+      const isLikedByCurrentUser = currentUserLikes.has(comment._id.toString());
+
+      nestedComments.push({
+        _id: comment._id.toString(),
+        content: comment.content,
+        userId: comment.userId.toString(),
+        postId: comment.postId.toString(),
+        parentId: comment.parentId ? comment.parentId.toString() : null,
+        likesCount: comment.likesCount,
+        createdAt: comment.createdAt.toISOString(),
+        updatedAt: comment.updatedAt ? comment.updatedAt.toISOString() : comment.createdAt.toISOString(),
+        user: { // Ensure 'image' is picked up for avatar
+          _id: comment.user?._id?.toString(),
+          name: comment.user?.name || 'Anonymous',
+          image: comment.user?.image || null, // Ensure this matches User model's avatar field (image or avatar)
+        },
+        isLikedByCurrentUser,
+        replies: children.length > 0 ? children : undefined,
+      });
+    }
+  }
+  return nestedComments;
+}
+
+// --- GET: Fetch all comments for a post, structured as a tree ---
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  await dbConnect(); // Use your dbConnect
   try {
-    console.log("POST comment - starting");
     const session = await getServerSession(authOptions);
+    const currentUserId = session?.user?.id ? toMongooseObjectId(session.user.id) : null;
 
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    let postId: mongoose.Types.ObjectId;
+    try {
+      postId = toMongooseObjectId(params.id);
+    } catch (error: any) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    const { content } = await request.json();
-    if (!content?.trim()) {
-      return NextResponse.json({ error: 'Comment cannot be empty' }, { status: 400 });
-    }
-
-    const postIdRaw = params.id;
-    console.log("Comment for post ID:", postIdRaw);
-
-    if (!ObjectId.isValid(postIdRaw)) {
-      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 });
-    }
-
-    const postId = new ObjectId(postIdRaw);
-    const userId = session.user.id;
-
-    const client = await getMongoClient(); // <--- Change here
-    const db = client.db('talesy');
-
-    const post = await db.collection('writings').findOne({ _id: postId });
-    if (!post) {
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
-    }
-
-    const comment = {
-      postId: postIdRaw,
-      userId,
-      content: content.trim(),
-      createdAt: new Date(),
-    };
-
-    console.log("Inserting comment:", comment);
-    const result = await db.collection('comments').insertOne(comment);
-    console.log("Comment inserted, ID:", result.insertedId);
-
-    // Ensure postId is properly formatted for the update
-    const updateResult = await db.collection('writings').updateOne(
-      { _id: postId },
-      { $inc: { comments: 1 } }
-    );
-    
-    console.log("Updated post comment count:", updateResult);
-
-    const commenter = await db.collection('users').findOne({ _id: toObjectId(userId) });
-
-    // Send email to post author if not commenting on own post
-    if (post.userId !== userId) {
-      const postAuthor = await db.collection('users').findOne({ _id: toObjectId(post.userId) });
-
-      if (postAuthor?.email && postAuthor.emailPreferences?.newComment !== false) {
-        try {
-          await sendTemplateEmail(postAuthor.email, 'newComment', [
-            postAuthor.name || 'User',
-            commenter?.name || 'Someone',
-            post.title,
-            postIdRaw,
-            content.trim().substring(0, 200),
-          ]);
-        } catch (e) {
-          console.error('Email sending failed:', e);
-        }
-      }
-    }
-
-    return NextResponse.json({
-      _id: result.insertedId,
-      ...comment,
-      user: {
-        name: commenter?.name || 'Anonymous',
-        avatar: commenter?.avatar || null,
+    const commentsAndReplies = await Comment.aggregate([
+      { $match: { postId: postId } },
+      {
+        $lookup: {
+          from: 'users', // Collection name for your User model (usually lowercase plural of model name)
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'user',
+        },
       },
-    });
+      {
+        $unwind: {
+          path: '$user',
+          preserveNullAndEmptyArrays: true // Keep comments even if user not found (though should not happen with required userId)
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          content: 1,
+          userId: 1,
+          postId: 1,
+          parentId: 1,
+          likesCount: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          'user._id': '$user._id',
+          'user.name': '$user.name',
+          'user.image': '$user.image', // Project 'image' for avatar
+          'user.avatar': '$user.avatar', // Project 'avatar' for avatar (if used)
+        },
+      },
+      { $sort: { createdAt: 1 } },
+    ]);
+
+    const likedCommentIds = new Set<string>();
+    if (currentUserId) {
+      const commentObjectIds = commentsAndReplies.map(c => toMongooseObjectId(c._id));
+      const userLikes = await CommentLike.find({
+        userId: currentUserId,
+        targetId: { $in: commentObjectIds }
+      }).select('targetId').lean();
+      userLikes.forEach(like => likedCommentIds.add(like.targetId.toString()));
+    }
+
+    const structuredComments = buildCommentTree(commentsAndReplies, null, likedCommentIds);
+
+    return NextResponse.json(structuredComments, { status: 200 });
   } catch (err) {
-    console.error('Comment POST error:', {
-      error: err,
-      message: err instanceof Error ? err.message : 'Unknown error',
-      stack: err instanceof Error ? err.stack : undefined
-    });
-    
-    return NextResponse.json({ 
-      error: 'Server error', 
-      details: err instanceof Error ? err.message : 'Unknown error' 
+    console.error('Comment GET error:', err);
+    return NextResponse.json({
+      error: 'Server error fetching comments',
+      details: err instanceof Error ? err.message : 'Unknown error'
     }, { status: 500 });
   }
 }
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
+// --- POST: Create a new comment or reply ---
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+  await dbConnect(); // Use your dbConnect
   try {
-    console.log("GET comments - starting");
-    const postIdRaw = params.id;
-    console.log("Getting comments for post:", postIdRaw);
-
-    if (!ObjectId.isValid(postIdRaw)) {
-      return NextResponse.json({ error: 'Invalid post ID format' }, { status: 400 });
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const postId = new ObjectId(postIdRaw);
+    const { content, parentId } = await request.json();
+    if (!content?.trim()) {
+      return NextResponse.json({ error: 'Comment content cannot be empty' }, { status: 400 });
+    }
 
-    const client = await getMongoClient(); // <--- Change here
-    const db = client.db('talesy');
+    let postId: mongoose.Types.ObjectId;
+    let userId: mongoose.Types.ObjectId;
+    try {
+      postId = toMongooseObjectId(params.id);
+      userId = toMongooseObjectId(session.user.id);
+    } catch (error: any) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
 
-    const comments = await db
-      .collection('comments')
-      .find({ postId: postIdRaw })
-      .sort({ createdAt: 1 }) // oldest to newest
-      .toArray();
+    const postExists = await Post.findById(postId);
+    if (!postExists) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    }
 
-    console.log(`Found ${comments.length} comments`);
-
-    if (comments.length > 0) {
-      // Get all user IDs from comments
-      const userIds = comments.map((c) => {
-        try {
-          return toObjectId(c.userId);
-        } catch (e) {
-          console.error("Invalid user ID:", c.userId);
-          return null;
+    let validParentId: mongoose.Types.ObjectId | null = null;
+    if (parentId) {
+      try {
+        validParentId = toMongooseObjectId(parentId);
+        const parentComment = await Comment.findById(validParentId).lean();
+        if (!parentComment || parentComment.postId.toString() !== postId.toString()) {
+          return NextResponse.json({ error: 'Parent comment not found or does not belong to this post' }, { status: 404 });
         }
-      }).filter(id => id !== null);
-      
-      const users = await db
-        .collection('users')
-        .find({ _id: { $in: userIds } })
-        .toArray();
-
-      console.log(`Found ${users.length} users for comments`);
-
-      const userMap = new Map(users.map((u) => [u._id.toString(), u]));
-
-      const populatedComments = comments.map((comment) => {
-        const user = userMap.get(comment.userId.toString());
-        return {
-          _id: comment._id,
-          content: comment.content,
-          userId: comment.userId,
-          postId: comment.postId,
-          createdAt: comment.createdAt,
-          user: {
-            name: user?.name || "Anonymous",
-            avatar: user?.avatar || null,
-          },
-        };
-      });
-
-      return NextResponse.json(populatedComments);
-    } else {
-      return NextResponse.json([]);
+      } catch (error: any) {
+        return NextResponse.json({ error: `Invalid parent comment ID: ${error.message}` }, { status: 400 });
+      }
     }
-  } catch (err) {
-    console.error('Comment GET error:', {
-      error: err,
-      message: err instanceof Error ? err.message : 'Unknown error',
-      stack: err instanceof Error ? err.stack : undefined
+
+    const newCommentDoc = new Comment({
+      postId,
+      userId,
+      content: content.trim(),
+      parentId: validParentId,
+      likesCount: 0,
     });
-    
-    return NextResponse.json({ 
-      error: 'Server error', 
-      details: err instanceof Error ? err.message : 'Unknown error' 
+
+    const savedComment = await newCommentDoc.save();
+
+    // Increment comment count on the post (only for top-level comments)
+    if (!validParentId) {
+      await Post.findByIdAndUpdate(postId, { $inc: { comments: 1 } });
+    }
+
+    // Populate user info for response
+    // Fetch user details for the response to avoid another API call from frontend
+    const commenter = await User.findById(userId).select('name image avatar').lean(); // Include avatar if it's a separate field
+
+    return NextResponse.json({
+      _id: savedComment._id.toString(),
+      content: savedComment.content,
+      userId: savedComment.userId.toString(),
+      postId: savedComment.postId.toString(),
+      parentId: savedComment.parentId?.toString() || null,
+      likesCount: savedComment.likesCount,
+      createdAt: savedComment.createdAt.toISOString(),
+      updatedAt: savedComment.updatedAt.toISOString(),
+      user: {
+        _id: commenter?._id.toString(),
+        name: commenter?.name || 'Anonymous',
+        image: commenter?.image || commenter?.avatar || null, // Prioritize 'image' from providers, fallback to 'avatar' if available
+      },
+      isLikedByCurrentUser: false,
+    }, { status: 201 });
+
+  } catch (err) {
+    console.error('Comment POST error:', err);
+    return NextResponse.json({
+      error: 'Server error posting comment',
+      details: err instanceof Error ? err.message : 'Unknown error'
     }, { status: 500 });
   }
 }

@@ -1,9 +1,9 @@
 // src/app/api/users/[id]/following/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getMongoClient } from '@/lib/dbConnect'; // <--- Change here
-import { ObjectId } from 'mongodb';
+import { getMongoClient } from '@/lib/dbConnect';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
+import { toObjectId } from '@/lib/utils/objectIdConverter'; // <--- NEW IMPORT
 
 // Define a minimal User type for the list
 interface UserProfile {
@@ -11,65 +11,63 @@ interface UserProfile {
   name: string;
   avatar?: string;
   bio?: string;
-  isFollowing?: boolean; 
+  isFollowing?: boolean;
 }
 
-function toObjectId(id: string | ObjectId) {
-  if (typeof id === 'string' && ObjectId.isValid(id)) return new ObjectId(id);
-  if (id instanceof ObjectId) return id;
-  throw new Error('Invalid ObjectId');
-}
-
-export async function GET(req: NextRequest) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) { // Use params
   try {
     const session = await getServerSession(authOptions);
     const currentUserId = session?.user?.id;
 
-    const urlSegments = req.nextUrl.pathname.split('/');
-    const targetUserIdRaw = urlSegments[urlSegments.indexOf('users') + 1];
+    const targetUserIdRaw = params.id; // Use params.id directly
 
     if (!targetUserIdRaw) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
     const targetUserId = toObjectId(targetUserIdRaw); // Convert to ObjectId
+    if (!targetUserId) { // Handle invalid target user ID
+      return NextResponse.json({ error: 'Invalid Target User ID format' }, { status: 400 });
+    }
 
-    const client = await getMongoClient(); // <--- Change here
+    const client = await getMongoClient();
     const db = client.db('talesy');
     const followCollection = db.collection('follows');
     const userCollection = db.collection('users');
 
     const followingRecords = await followCollection.find({
-      followerId: targetUserId, // Use ObjectId
+      followerId: targetUserId,
     }).toArray();
 
-    const followingIds = followingRecords.map(f => f.followingId);
+    // Filter out any potential invalid IDs from the fetched records before processing
+    const followingIds = followingRecords.map(f => toObjectId(f.followingId)).filter(Boolean) as import('mongodb').ObjectId[];
 
     const followingProfiles: UserProfile[] = [];
     if (followingIds.length > 0) {
-      const objectIdFollowingIds = followingIds.map(id => toObjectId(id)); // Use toObjectId
-
       const users = await userCollection.find(
-        { _id: { $in: objectIdFollowingIds } },
-        { projection: { name: 1, avatar: 1, bio: 1 } } // Removed emailPreferences as it's not part of UserProfile
+        { _id: { $in: followingIds } }, // Use the filtered ObjectIds
+        { projection: { name: 1, avatar: 1, bio: 1 } }
       ).toArray();
 
       for (const user of users) {
         let isFollowing = false;
         if (currentUserId) {
-          const followingCheck = await followCollection.findOne({
-            followerId: toObjectId(currentUserId), // Convert to ObjectId
-            followingId: user._id, // User._id is already ObjectId from query result
-          });
-          isFollowing = !!followingCheck;
+          const currentUserIdObj = toObjectId(currentUserId);
+          if (currentUserIdObj) { // Ensure currentUserId is also valid
+              const followingCheck = await followCollection.findOne({
+                followerId: currentUserIdObj,
+                followingId: user._id, // user._id is already ObjectId from query result
+              });
+              isFollowing = !!followingCheck;
+          }
         }
 
         followingProfiles.push({
-          _id: user._id.toString(), // Ensure _id is string for client
+          _id: user._id.toString(),
           name: user.name || 'Anonymous User',
           avatar: user.avatar,
           bio: user.bio,
-          isFollowing: isFollowing, 
+          isFollowing: isFollowing,
         });
       }
     }
