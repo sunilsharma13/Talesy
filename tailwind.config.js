@@ -16,6 +16,9 @@ module.exports = {
       fontFamily: {
         geistSans: ['var(--font-geist-sans)', 'sans-serif'],
         geistMono: ['var(--font-geist-mono)', 'monospace'],
+        // Assuming you also have inter and roboto-mono variables from layout.tsx
+        inter: ['var(--font-inter)', 'sans-serif'],
+        robotoMono: ['var(--font-roboto-mono)', 'monospace'],
       },
       animation: {
         // Existing animations:
@@ -28,6 +31,9 @@ module.exports = {
         "fade-in-up": "fadeIn 1s ease-out forwards",
         "text-pop": "textPop 0.8s ease-out forwards",
         "bounce-once": "bounceOnce 1.5s ease-out 0.8s 1 forwards",
+
+        // NEW: Gradient Pulse animation
+        "gradient-pulse": "gradient-pulse 15s ease infinite",
       },
       keyframes: {
         // Your existing keyframes:
@@ -55,6 +61,13 @@ module.exports = {
           "0%, 100%": { transform: "translateY(0)" },
           "20%": { transform: "translateY(-10px)" },
           "40%": { transform: "translateY(0)" },
+        },
+
+        // NEW: Keyframes for Gradient Pulse animation
+        "gradient-pulse": {
+          "0%": { "background-position": "0% 50%" },
+          "50%": { "background-position": "100% 50%" },
+          "100%": { "background-position": "0% 50%" },
         },
       },
     },

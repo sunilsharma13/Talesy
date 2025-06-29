@@ -1,8 +1,9 @@
 // src/app/layout.tsx
 import './globals.css';
 import { Inter, Roboto_Mono } from 'next/font/google';
-import Footer from '@/components/Footer'; // Keep Footer here if it's a global, non-context-dependent footer
-import ClientProviders from '@/components/ClientProviders'; // Import your new consolidated client wrapper
+import Footer from '@/components/Footer'; 
+import ClientProviders from '@/components/ClientProviders';
+import NavbarWrapper from '@/components/NavbarWrapper'; // NEW: NavbarWrapper इम्पोर्ट करें
 
 // Define your Google Fonts with subsets and variable names
 const inter = Inter({
@@ -28,11 +29,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${roboto_mono.variable}`}>
       <body>
-        {/* All client-side providers are now safely wrapped within ClientProviders */}
         <ClientProviders>
-          {children} {/* This will be the rest of your application */}
+          <NavbarWrapper /> 
+          {children} 
         </ClientProviders>
-        <Footer /> {/* Footer is outside ClientProviders if it doesn't need its context */}
+        <Footer /> 
       </body>
     </html>
   );
