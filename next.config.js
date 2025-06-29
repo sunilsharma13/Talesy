@@ -19,9 +19,16 @@ const nextConfig = {
       },
     ],
   },
-  // NEW: Yeh line Next.js app ko standalone serverless function ke roop mein deploy karegi.
-  // Isse useSearchParams() jaise dynamic features wale pages build time par error nahi denge.
   output: 'standalone', 
+  async redirects() {
+    return [
+      {
+        source: '/', // The incoming request path
+        destination: '/login', // The path to redirect to
+        permanent: true, // true for 308 (permanent), false for 307 (temporary)
+      },
+    ];
+  },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
