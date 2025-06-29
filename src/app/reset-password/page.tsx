@@ -1,7 +1,7 @@
 // app/reset-password/page.tsx
 "use client";
 
-import { useState, useEffect, useContext, createContext } from "react"; // Added createContext
+import { useState, useEffect, useContext, createContext, Suspense } from "react"; // Added Suspense
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "react-hot-toast";
 import { motion } from "framer-motion";
@@ -12,24 +12,48 @@ interface ThemeContextType {
   theme: "light" | "dark" | "talesy-accent";
   setTheme: (theme: "light" | "dark" | "talesy-accent") => void;
 }
-// This line should be replaced with `import { ThemeContext } from '@/path/to/your/ThemeContext';`
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
-// This line should be replaced with `import { useTheme } from '@/path/to/your/ThemeContext';`
 const useTheme = () => {
   const context = useContext(ThemeContext);
   return context;
 };
 
-export default function ResetPasswordPage() {
+// Component that uses useSearchParams, wrapped in a dedicated component
+function ResetPasswordContent() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const searchParams = useSearchParams(); // useSearchParams is here
   const userId = searchParams.get("userId"); // Get userId from query param
   const { theme } = useTheme() || { theme: 'dark' };
-  const getDynamicThemeClass = (prop: string) => `var(--${prop})`;
+  
+  // Helper function to get CSS variable values
+  const getDynamicThemeClass = (prop: string) => {
+    if (typeof document === 'undefined') return ''; // Handle SSR for initial render
+    const rootStyles = getComputedStyle(document.documentElement);
+    const value = rootStyles.getPropertyValue(`--${prop}`).trim();
+    // Fallback values for development/initial render if not found
+    if (!value) {
+      if (prop === 'background-primary') return '#ffffff';
+      if (prop === 'background-secondary') return '#f0f2f5';
+      if (prop === 'border-color') return '#e2e8f0';
+      if (prop === 'text-primary') return '#1a202c';
+      if (prop === 'text-secondary') return '#4a5568';
+      if (prop === 'text-secondary-faded') return '#718096';
+      if (prop === 'accent-color') return '#6366f1';
+      if (prop === 'active-text') return '#ffffff';
+      if (prop === 'input-background') return '#ffffff';
+      if (prop === 'input-border') return '#e2e8f0';
+      if (prop === 'error-background') return '#fee2e2';
+      if (prop === 'error-color') return '#ef4444';
+      if (prop === 'error-border') return '#fca5a5';
+      if (prop === 'shadow-color-subtle') return 'rgba(0,0,0,0.1)';
+      if (prop === 'accent-color-hover') return '#4f46e5';
+    }
+    return value;
+  };
 
   useEffect(() => {
     if (!userId) {
@@ -176,5 +200,20 @@ export default function ResetPasswordPage() {
         </form>
       </motion.div>
     </div>
+  );
+}
+
+// Default export is wrapped in Suspense for useSearchParams
+export default function ResetPasswordPageWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-[calc(100vh-80px)] items-center justify-center p-4">
+        <div className="w-full max-w-md p-8 rounded-xl shadow-lg bg-gray-800 text-white text-center">
+          Loading password reset form...
+        </div>
+      </div>
+    }>
+      <ResetPasswordContent />
+    </Suspense>
   );
 }
