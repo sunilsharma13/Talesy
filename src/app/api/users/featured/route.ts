@@ -1,21 +1,34 @@
-// app/api/users/featured/route.ts
+// src/app/api/users/featured/route.ts
+
+// NEW: Forces dynamic rendering due to use of getServerSession.
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { getMongoClient } from "@/lib/dbConnect";
-import { ObjectId } from "mongodb";
-import { getServerSession } from 'next-auth/next'; // Import getServerSession
-import { authOptions } from '@/lib/auth'; // Import authOptions
+import { ObjectId } from "mongodb"; // Use ObjectId from 'mongodb'
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
 
-// Helper function for consistent ObjectId conversion
-function toObjectId(id: string | ObjectId) {
-  if (typeof id === 'string' && ObjectId.isValid(id)) return new ObjectId(id);
+// Helper function for consistent ObjectId conversion using 'mongodb' ObjectId
+function toObjectId(id: string | ObjectId): ObjectId {
   if (id instanceof ObjectId) return id;
-  throw new Error('Invalid ObjectId');
+  if (typeof id === 'string' && ObjectId.isValid(id)) {
+    return new ObjectId(id);
+  }
+  throw new Error('Invalid ObjectId format provided to toObjectId helper.');
 }
 
 export async function GET() {
   try {
     const session = await getServerSession(authOptions); // Get current user session
-    const currentUserId = session?.user?.id ? toObjectId(session.user.id) : null; // Convert to ObjectId
+    let currentUserId: ObjectId | null = null;
+    if (session?.user?.id) {
+      try {
+        currentUserId = toObjectId(session.user.id);
+      } catch (e) {
+        console.warn("Invalid session user ID for ObjectId conversion:", session.user.id, e);
+      }
+    }
 
     const client = await getMongoClient();
     const db = client.db("talesy");
@@ -42,7 +55,7 @@ export async function GET() {
         return null;
       }
 
-      const user = await db.collection("users").findOne({ _id: userIdObj });
+      const user = await db.collection("users").findOne({ _id: userIdObj }); // Use ObjectId from 'mongodb'
 
       if (!user) return null;
 
@@ -54,7 +67,7 @@ export async function GET() {
       if (currentUserId && userIdObj.toString() !== currentUserId.toString()) {
         const followRecord = await db.collection("follows").findOne({
           followerId: currentUserId,
-          followingId: userIdObj,
+          followingId: userIdObj, // Use ObjectId from 'mongodb'
         });
         isFollowing = !!followRecord;
       }

@@ -1,6 +1,10 @@
-// app/api/debug/route.ts
+// src/app/api/debug/route.ts
+
+// NEW: Forces dynamic rendering due to use of getServerSession and direct MongoDB driver calls.
+export const dynamic = 'force-dynamic'; 
+
 import { NextResponse } from 'next/server';
-import { getMongoClient } from "@/lib/dbConnect"; // Corrected import
+import { getMongoClient } from "@/lib/dbConnect";
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { ObjectId } from 'mongodb'; // ObjectId class ko import karein
@@ -13,7 +17,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized: Debug access requires authentication.' }, { status: 401 });
     }
     
-    const client = await getMongoClient(); // Corrected client access
+    const client = await getMongoClient();
     const db = client.db('talesy');
     
     // Get all collection names
@@ -86,7 +90,7 @@ export async function GET() {
     return NextResponse.json({
       collectionNames,
       likelyPostsCollection: postsCollectionName,
-      sampleDocuments: samplePosts, // <-- Yeh line ab theek honi chahiye
+      sampleDocuments: samplePosts,
       totalDocuments: totalPostsCount,
       userHasPosts: userHasPosts,
       sessionUserId: session.user.id

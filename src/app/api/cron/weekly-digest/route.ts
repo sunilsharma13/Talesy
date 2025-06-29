@@ -1,7 +1,10 @@
-// app/api/cron/weekly-digest/route.ts
+// src/app/api/cron/weekly-digest/route.ts
+
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
-import { getMongoClient } from "@/lib/dbConnect"; // <-- Yahan change kiya
-import { ObjectId } from 'mongodb';
+import { getMongoClient } from "@/lib/dbConnect";
+import { ObjectId } from 'mongodb'; // NEW: Use ObjectId from 'mongodb'
 import { sendTemplateEmail } from '@/lib/email';
 
 export async function GET(req: Request) {
@@ -14,9 +17,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    const client = await getMongoClient(); // <-- Yahan change kiya
+    const client = await getMongoClient();
     const db = client.db('talesy');
     
+    // users._id will be ObjectId from 'mongodb'
     const users = await db.collection('users')
       .find({ 'emailPreferences.weeklyDigest': { $ne: false } })
       .toArray();
@@ -30,13 +34,12 @@ export async function GET(req: Request) {
         return null;
       }
       
-      let userId: ObjectId;
-      if (user._id instanceof ObjectId) {
-        userId = user._id;
-      } else if (typeof user._id === 'string' && ObjectId.isValid(user._id)) {
-        userId = new ObjectId(user._id);
-      } else {
-        console.error("Invalid or missing user ID for digest processing:", user._id);
+      let userId: ObjectId; // Use ObjectId from 'mongodb'
+      try {
+        // user._id can be string or ObjectId instance, convert to ObjectId consistently
+        userId = new ObjectId(user._id); 
+      } catch (e) {
+        console.error(`Invalid user ID format for user ${user._id}:`, e);
         return null;
       }
       
@@ -50,7 +53,15 @@ export async function GET(req: Request) {
         .find({ userId: userId })
         .toArray();
       
-      const postObjectIds = userPosts.map(post => post._id); 
+      const postObjectIds = userPosts.map(post => {
+        try {
+          // post._id can be string or ObjectId instance, convert to ObjectId consistently
+          return new ObjectId(post._id); 
+        } catch (e) {
+          console.error(`Invalid post ID format for post ${post._id}:`, e);
+          return null;
+        }
+      }).filter(Boolean) as ObjectId[]; // Filter out nulls and assert type
       
       const newLikes = await db.collection('likes')
         .countDocuments({

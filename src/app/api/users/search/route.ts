@@ -1,14 +1,18 @@
-// app/api/users/search/route.ts
+// src/app/api/users/search/route.ts
+
+// NEW: Forces dynamic rendering due to use of request.url
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
-import { getMongoClient } from "@/lib/dbConnect"; // <--- Change here
-import { ObjectId } from "mongodb"; // Added ObjectId import for potential future use or consistency
+import { getMongoClient } from "@/lib/dbConnect";
+import { ObjectId } from "mongodb"; // Added ObjectId import for consistency with other files
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q") || "";
 
-    const client = await getMongoClient(); // <--- Change here
+    const client = await getMongoClient();
     const db = client.db("talesy");
 
     const users = await db

@@ -1,5 +1,9 @@
 // src/app/api/user/settings/route.ts
-import { NextResponse } from 'next/server'; // Use NextResponse for Next.js 13/14 App Router
+
+// NEW: Forces dynamic rendering due to use of getServerSession.
+export const dynamic = 'force-dynamic'; 
+
+import { NextResponse } from 'next/server';
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth"; // Your NextAuth.js config
 import dbConnect from '@/lib/dbConnect'; // Assuming you have a dbConnect utility
@@ -16,6 +20,7 @@ export async function GET(request: Request) {
     await dbConnect(); // Connect to your database
     
     // Fetch user settings, including notificationSettings
+    // Mongoose automatically handles ObjectId conversion for findById
     const user = await User.findById(session.user.id).select('name email username bio avatar image coverImage notificationSettings');
 
     if (!user) {
@@ -29,7 +34,7 @@ export async function GET(request: Request) {
       bio: user.bio,
       avatar: user.avatar || user.image, // Prefer avatar, fallback to image
       coverImage: user.coverImage,
-      notificationSettings: user.notificationSettings || { comments: true, follows: true, likes: true, messages: true } // Ensure defaults if not set
+      notificationSettings: user.notificationSettings || { comments: true, follows: true, likes: true, true: true } // Ensure defaults if not set
     };
 
     return NextResponse.json(userSettings, { status: 200 });
@@ -53,6 +58,7 @@ export async function PUT(req: Request) {
         const { name, username, bio, avatar, coverImage, notificationSettings } = body;
 
         await dbConnect();
+        // Mongoose automatically handles ObjectId conversion for findById
         const user = await User.findById(session.user.id);
 
         if (!user) {

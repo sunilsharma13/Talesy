@@ -1,9 +1,13 @@
-// src/app/api/posts/route.ts (Updated to include author's followers count)
+// src/app/api/posts/route.ts
+
+// NEW: Forces dynamic rendering due to use of getServerSession and req.url
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getMongoClient } from '@/lib/dbConnect';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
+import { ObjectId } from 'mongodb'; // MongoDB's native ObjectId
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,7 +15,7 @@ export async function GET(req: NextRequest) {
 
     const url = new URL(req.url);
     const publishedOnly = url.searchParams.get('publishedOnly') === 'true';
-    const sortOrder = url.searchParams.get('sortOrder') || 'latest';
+    const sortOrder = url.searchParams.get('sortOrder') || 'latest'; // This variable isn't used in the provided code
     const limit = parseInt(url.searchParams.get('limit') || '10');
     const fetchFollowingFeed = url.searchParams.get('following') === 'true';
 
@@ -26,7 +30,7 @@ export async function GET(req: NextRequest) {
       query.status = 'published';
     }
 
-    let sort: any = { createdAt: -1 };
+    let sort: any = { createdAt: -1 }; // Default sort is latest
 
     if (fetchFollowingFeed) {
       if (!session?.user?.id) {
@@ -42,10 +46,10 @@ export async function GET(req: NextRequest) {
       const followedUserIds = followedUsersRecords.map(record => record.followingId);
 
       if (followedUserIds.length === 0) {
-        return NextResponse.json([]);
+        return NextResponse.json([]); // No posts if not following anyone
       }
 
-      query.author = { $in: followedUserIds };
+      query.author = { $in: followedUserIds }; // Assuming 'author' field in 'writings' stores author's _id
     }
 
     const posts = await postsCollection.aggregate([
@@ -55,20 +59,20 @@ export async function GET(req: NextRequest) {
       {
         $lookup: {
           from: 'users', // The collection name for users
-          localField: 'author',
+          localField: 'author', // Assuming 'author' in 'writings' is ObjectId
           foreignField: '_id',
           as: 'authorDetails'
         }
       },
       {
-        $unwind: '$authorDetails'
+        $unwind: '$authorDetails' // Unwind to get author details as an object
       },
       // NEW: Look up followers for each author from the 'follows' collection
       {
         $lookup: {
           from: 'follows',
-          localField: 'authorDetails._id',
-          foreignField: 'followingId',
+          localField: 'authorDetails._id', // Author's _id to find who follows them
+          foreignField: 'followingId', // 'followingId' in 'follows' is the user being followed
           as: 'authorFollowersList'
         }
       },
@@ -95,8 +99,11 @@ export async function GET(req: NextRequest) {
     const postsWithIsFollowing = await Promise.all(posts.map(async (post: any) => {
       let isFollowingAuthor = false;
       if (session?.user?.id && post.author?._id) {
+        // Ensure conversion to ObjectId for comparison
         const currentUserIdObj = new ObjectId(session.user.id);
         const authorIdObj = new ObjectId(post.author._id);
+        
+        // Check if current user is following the author of this post
         const followRecord = await followsCollection.findOne({
           followerId: currentUserIdObj,
           followingId: authorIdObj,
@@ -111,7 +118,6 @@ export async function GET(req: NextRequest) {
         }
       };
     }));
-
 
     return NextResponse.json(postsWithIsFollowing);
 
