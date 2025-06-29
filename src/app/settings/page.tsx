@@ -6,9 +6,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { useTheme } from '@/context/ThemeContext';
-import axios from 'axios'; // Import axios
-import toast from 'react-hot-toast'; // Import react-hot-toast
+import { useTheme } from '@/context/ThemeContext'; // Ensure this import is correct
+import axios from 'axios';
+import toast from 'react-hot-toast';
 
 // --- Type Definitions ---
 interface LoginSession {
@@ -37,7 +37,7 @@ const NotificationsSettings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { data: session } = useSession();
-  const { getDynamicThemeClass } = useTheme();
+  const { getDynamicThemeClass } = useTheme(); // Use getDynamicThemeClass from context
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -201,12 +201,10 @@ const NotificationsSettings = () => {
 export default function SettingsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const { theme, getDynamicThemeClass } = useTheme();
+  const { theme, getDynamicThemeClass } = useTheme(); // Make sure useTheme is correctly returning getDynamicThemeClass
 
   const [activeTab, setActiveTab] = useState("account");
 
-  // These states are no longer directly used for profile editing on this page,
-  // but kept as they might be used elsewhere or for initialization.
   const [profileName, setProfileName] = useState('');
   const [profileBio, setProfileBio] = useState('');
   const [profileAvatar, setProfileAvatar] = useState('');
@@ -226,8 +224,6 @@ export default function SettingsPage() {
     if (!session) {
       router.push('/login');
     } else {
-      // You might still fetch and set these if you want to display them
-      // as read-only info, or if you plan to move profile editing elsewhere.
       setProfileName(session.user.name || '');
       setProfileBio(session.user.bio || '');
       setProfileAvatar(session.user.image || session.user.avatar || '');
@@ -431,18 +427,34 @@ export default function SettingsPage() {
                     )}
                   </AnimatePresence>
                   <div className="mt-6 flex flex-col sm:flex-row justify-between items-center">
+                    {/* Update Password Button */}
                     <motion.button
                       type="submit"
                       disabled={saving}
-                      className="px-5 py-2.5 font-medium rounded-lg transition-colors duration-300 disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto
-                                 hover:bg-[var(--accent-color-hover)]"
+                      // Updated className for consistent button size and appearance
+                      className="px-5 py-2.5 font-medium rounded-lg shadow-lg transition-all transform duration-300 disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto"
                       style={{
                         backgroundColor: getDynamicThemeClass('accent-color'),
-                        color: getDynamicThemeClass('active-text'),
-                        boxShadow: `0 4px 10px ${getDynamicThemeClass('shadow-color-subtle')}`,
-                      } as React.CSSProperties}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
+                        color: 'white',
+                        border: `2px solid ${getDynamicThemeClass('accent-color')}`,
+                        boxShadow: `0 4px 10px ${getDynamicThemeClass('shadow-color-subtle') || 'rgba(0,0,0,0.1)'}`
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!saving) {
+                          e.currentTarget.style.backgroundColor = getDynamicThemeClass('active-bg');
+                          e.currentTarget.style.color = getDynamicThemeClass('text-primary');
+                          e.currentTarget.style.borderColor = getDynamicThemeClass('active-bg');
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!saving) {
+                          e.currentTarget.style.backgroundColor = getDynamicThemeClass('accent-color');
+                          e.currentTarget.style.color = 'white';
+                          e.currentTarget.style.borderColor = getDynamicThemeClass('accent-color');
+                        }
+                      }}
+                      whileHover={!saving ? { scale: 1.02, boxShadow: `0 8px 20px ${getDynamicThemeClass('shadow-color-subtle') || 'rgba(0,0,0,0.2)'}` } : {}}
+                      whileTap={!saving ? { scale: 0.98 } : {}}
                     >
                       {saving ? 'Updating...' : 'Update Password'}
                     </motion.button>
@@ -466,19 +478,35 @@ export default function SettingsPage() {
                 </div>
                 <div className="mt-8">
                   <h3 className="text-sm font-medium mb-4" style={{ color: getDynamicThemeClass('error-color') }}>Danger Zone</h3>
+                  {/* Deactivate Account Button */}
                   <motion.button
                     type="button"
-                    className="px-4 py-2 font-medium rounded-lg transition-colors duration-300 disabled:opacity-70 disabled:cursor-not-allowed
-                                 hover:bg-[var(--danger-button-hover-bg)]"
-                    style={{
-                      backgroundColor: getDynamicThemeClass('danger-button-bg'),
-                      border: `1px solid ${getDynamicThemeClass('danger-button-border')}`,
-                      color: getDynamicThemeClass('danger-button-text'),
-                    }}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
                     onClick={() => setShowDeactivationConfirm(true)}
                     disabled={saving}
+                    // Updated className for consistent button size and appearance
+                    className="px-5 py-2.5 font-medium rounded-lg shadow-lg transition-all transform duration-300 disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto"
+                    style={{
+                      backgroundColor: getDynamicThemeClass('danger-button-bg'),
+                      color: getDynamicThemeClass('danger-button-text'),
+                      border: `2px solid ${getDynamicThemeClass('danger-button-bg')}`,
+                      boxShadow: `0 4px 10px ${getDynamicThemeClass('shadow-color-subtle') || 'rgba(0,0,0,0.1)'}`
+                    }}
+                    onMouseEnter={(e) => {
+                        if (!saving) {
+                          e.currentTarget.style.backgroundColor = getDynamicThemeClass('danger-button-hover-bg');
+                          e.currentTarget.style.color = getDynamicThemeClass('danger-button-hover-text') || 'white';
+                          e.currentTarget.style.borderColor = getDynamicThemeClass('danger-button-hover-bg');
+                        }
+                    }}
+                    onMouseLeave={(e) => {
+                        if (!saving) {
+                          e.currentTarget.style.backgroundColor = getDynamicThemeClass('danger-button-bg');
+                          e.currentTarget.style.color = getDynamicThemeClass('danger-button-text');
+                          e.currentTarget.style.borderColor = getDynamicThemeClass('danger-button-bg');
+                        }
+                    }}
+                    whileHover={!saving ? { scale: 1.02, boxShadow: `0 8px 20px ${getDynamicThemeClass('shadow-color-subtle') || 'rgba(0,0,0,0.2)'}` } : {}}
+                    whileTap={!saving ? { scale: 0.98 } : {}}
                   >
                     Deactivate Account
                   </motion.button>
@@ -507,19 +535,35 @@ export default function SettingsPage() {
                   <p className="text-sm" style={{ color: getDynamicThemeClass('text-secondary') }}>No active login sessions found.</p>
                 )}
                 <div className="mt-8">
+                  {/* Log out from all devices Button */}
                   <motion.button
                     type="button"
                     onClick={handleLogoutAllDevices}
                     disabled={saving}
-                    className="px-4 py-2 font-medium rounded-lg transition-colors duration-300 disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto
-                                 hover:bg-[var(--button-secondary-hover-bg)]"
+                    // Updated className for consistent button size and appearance
+                    className="px-5 py-2.5 font-medium rounded-lg shadow-lg transition-all transform duration-300 disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto"
                     style={{
                       backgroundColor: getDynamicThemeClass('button-secondary-bg'),
                       color: getDynamicThemeClass('button-secondary-text'),
-                      border: `1px solid ${getDynamicThemeClass('button-secondary-border')}`,
+                      border: `2px solid ${getDynamicThemeClass('button-secondary-border')}`,
+                      boxShadow: `0 4px 10px ${getDynamicThemeClass('shadow-color-subtle') || 'rgba(0,0,0,0.1)'}`
                     }}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    onMouseEnter={(e) => {
+                        if (!saving) {
+                          e.currentTarget.style.backgroundColor = getDynamicThemeClass('button-secondary-hover-bg');
+                          e.currentTarget.style.color = getDynamicThemeClass('button-secondary-hover-text') || getDynamicThemeClass('button-secondary-text');
+                          e.currentTarget.style.borderColor = getDynamicThemeClass('button-secondary-hover-bg');
+                        }
+                    }}
+                    onMouseLeave={(e) => {
+                        if (!saving) {
+                          e.currentTarget.style.backgroundColor = getDynamicThemeClass('button-secondary-bg');
+                          e.currentTarget.style.color = getDynamicThemeClass('button-secondary-text');
+                          e.currentTarget.style.borderColor = getDynamicThemeClass('button-secondary-border');
+                        }
+                    }}
+                    whileHover={!saving ? { scale: 1.02, boxShadow: `0 8px 20px ${getDynamicThemeClass('shadow-color-subtle') || 'rgba(0,0,0,0.2)'}` } : {}}
+                    whileTap={!saving ? { scale: 0.98 } : {}}
                   >
                     {saving ? 'Logging out...' : 'Log out from all devices'}
                   </motion.button>
@@ -624,20 +668,37 @@ export default function SettingsPage() {
                   >
                     Cancel
                   </button>
-                  <button
+                  {/* Deactivate Button in Confirmation Modal */}
+                  <motion.button
                     onClick={handleDeactivateAccount}
                     disabled={saving}
-                    className="px-4 py-2 font-medium rounded-lg transition-colors duration-300 disabled:opacity-70 disabled:cursor-not-allowed
-                                bg-[var(--danger-button-bg)] text-[var(--danger-button-text)] border-[1px] border-[var(--danger-button-border)]
-                                hover:bg-[var(--danger-button-hover-bg)]"
+                    // Updated className for consistent button size and appearance
+                    className="px-5 py-2.5 font-medium rounded-lg shadow-lg transition-all transform duration-300 disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto"
                     style={{
                       backgroundColor: getDynamicThemeClass('danger-button-bg'),
                       color: getDynamicThemeClass('danger-button-text'),
-                      border: `1px solid ${getDynamicThemeClass('danger-button-border')}`,
+                      border: `2px solid ${getDynamicThemeClass('danger-button-bg')}`,
+                      boxShadow: `0 4px 10px ${getDynamicThemeClass('shadow-color-subtle') || 'rgba(0,0,0,0.1)'}`
                     }}
+                    onMouseEnter={(e) => {
+                        if (!saving) {
+                          e.currentTarget.style.backgroundColor = getDynamicThemeClass('danger-button-hover-bg');
+                          e.currentTarget.style.color = getDynamicThemeClass('danger-button-hover-text') || 'white';
+                          e.currentTarget.style.borderColor = getDynamicThemeClass('danger-button-hover-bg');
+                        }
+                    }}
+                    onMouseLeave={(e) => {
+                        if (!saving) {
+                          e.currentTarget.style.backgroundColor = getDynamicThemeClass('danger-button-bg');
+                          e.currentTarget.style.color = getDynamicThemeClass('danger-button-text');
+                          e.currentTarget.style.borderColor = getDynamicThemeClass('danger-button-bg');
+                        }
+                    }}
+                    whileHover={!saving ? { scale: 1.02, boxShadow: `0 8px 20px ${getDynamicThemeClass('shadow-color-subtle') || 'rgba(0,0,0,0.2)'}` } : {}}
+                    whileTap={!saving ? { scale: 0.98 } : {}}
                   >
                     {saving ? 'Deactivating...' : 'Deactivate'}
-                  </button>
+                  </motion.button>
                 </div>
               </motion.div>
             </motion.div>
